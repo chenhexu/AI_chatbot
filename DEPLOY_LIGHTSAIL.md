@@ -317,3 +317,21 @@ pm2 logs crawler --lines 20
 
 Your other project is completely safe - everything is isolated in `~/crawler-app/`!
 
+## 💰 Cost Management & Billing Alerts
+
+**Important:** Set up billing alerts to avoid surprise charges!
+
+See `AWS_BILLING_ALERTS.md` for complete instructions on:
+- Setting up billing alerts (50%, 75%, 90%, 100% thresholds)
+- Email notifications to monitor costs in real-time
+- Cost budgets and resource usage monitoring
+- AWS mobile app setup
+
+**Quick setup:**
+1. AWS Console → Billing → Billing preferences → Enable "Receive Billing Alerts"
+2. CloudWatch → Create billing alarms
+3. Subscribe your dad's email to receive alerts
+4. Set up cost budgets for detailed tracking
+
+This will prevent surprise charges like the $30 incident!
+
