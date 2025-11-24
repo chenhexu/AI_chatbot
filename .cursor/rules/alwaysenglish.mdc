@@ -1,0 +1,4 @@
+---
+alwaysApply: true
+---
+Always respond in English. Never respond in Chinese or any other language, even if the user asks questions in Chinese or the project involves Chinese content. All code comments, explanations, and communications should be defautly English.
