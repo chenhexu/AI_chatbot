@@ -9,7 +9,7 @@ async function main() {
   
   const crawler = new WebCrawler({
     startUrl,
-    maxDepth: parseInt(process.env.CRAWLER_MAX_DEPTH || '8'),
+    maxDepth: parseInt(process.env.CRAWLER_MAX_DEPTH || '5'),
     maxPages: parseInt(process.env.CRAWLER_MAX_PAGES || '2000'),
     rateLimitMs: parseInt(process.env.CRAWLER_RATE_LIMIT_MS || '1000'), // 1 second per request
     userAgent: 'Collège-Saint-Louis-Crawler/1.0',

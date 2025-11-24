@@ -32,18 +32,39 @@ mkdir -p ~/crawler-app
 cd ~/crawler-app
 ```
 
-### 3. Install Node.js (if not already installed)
+### 3. Check Server Resources (Optional but Recommended)
+
+Before starting, check if you have enough resources:
+
+```bash
+# Quick resource check
+free -h                    # Check RAM
+df -h                      # Check disk space
+ps aux --sort=-%mem | head -10  # Check running processes
+pm2 list                   # Check PM2 processes (if your other project uses it)
+```
+
+**See `CHECK_RESOURCES.md` for detailed resource checking guide.**
+
+### 4. Install Node.js (if not already installed)
 
 ```bash
 # Check if Node.js is installed
 node --version
 
-# If not installed, install Node.js 18+
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+# If not installed, install Node.js 20.x (LTS - recommended)
+# Or use 24.x for latest version
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt-get install -y nodejs
+
+# Verify installation
+node --version
+npm --version
 ```
 
-### 4. Clone/Upload Your Project
+**Note**: If you see deprecation warnings, you can use Node.js 20.x (LTS) or 24.x (current). Both work fine.
+
+### 5. Clone/Upload Your Project
 
 **Option A: Use Lightsail Browser SSH (Easiest)**
 1. Go to Lightsail console → Connect tab
@@ -98,14 +119,14 @@ git clone https://your-token@github.com/yourusername/AI_Chatbot.git .
    - Private key: Use the downloaded Lightsail key
 3. Drag and drop files to `~/crawler-app/`
 
-### 5. Install Dependencies
+### 6. Install Dependencies
 
 ```bash
 cd ~/crawler-app
 npm install
 ```
 
-### 6. Set Up Environment Variables
+### 7. Set Up Environment Variables
 
 ```bash
 # Create .env.local file
@@ -116,7 +137,7 @@ Add your environment variables:
 ```env
 CRAWLER_START_URL=https://collegesaintlouis.ecolelachine.com/
 CRAWLER_MAX_PAGES=2000
-CRAWLER_MAX_DEPTH=8
+CRAWLER_MAX_DEPTH=5
 CRAWLER_RATE_LIMIT_MS=1000
 CRAWLER_DATA_FOLDER=./data/scraped
 SKIP_CRAWLED_PAGES=true
@@ -124,7 +145,7 @@ SKIP_CRAWLED_PAGES=true
 
 Save and exit (Ctrl+X, then Y, then Enter)
 
-### 7. Install PM2 (Process Manager)
+### 8. Install PM2 (Process Manager)
 
 PM2 will keep the crawler running even if you disconnect:
 
@@ -132,7 +153,7 @@ PM2 will keep the crawler running even if you disconnect:
 sudo npm install -g pm2
 ```
 
-### 8. Create PM2 Configuration
+### 9. Create PM2 Configuration
 
 ```bash
 nano ecosystem.config.js
@@ -157,7 +178,7 @@ module.exports = {
 };
 ```
 
-### 9. Start the Crawler
+### 10. Start the Crawler
 
 ```bash
 # Start with PM2
@@ -174,7 +195,7 @@ pm2 save
 pm2 startup
 ```
 
-### 10. Monitor the Crawler
+### 11. Monitor the Crawler
 
 ```bash
 # View real-time logs

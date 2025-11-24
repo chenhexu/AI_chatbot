@@ -52,7 +52,7 @@ export class WebCrawler {
 
   constructor(config: CrawlerConfig) {
     this.config = {
-      maxDepth: 8, // Increased from 5 to crawl deeper
+      maxDepth: 5, // Default depth for crawling
       maxPages: 2000, // Increased to crawl more pages
       rateLimitMs: 1000, // 1 second per request for faster crawling
       userAgent: 'Collège-Saint-Louis-Crawler/1.0',
