@@ -70,7 +70,12 @@ export class WebCrawler {
   async crawl(): Promise<CrawlResult> {
     console.log(`Starting crawl from: ${this.config.startUrl}`);
     console.log(`Max depth: ${this.config.maxDepth}, Max pages: ${this.config.maxPages}`);
-    console.log(`Rate limit: ${this.config.rateLimitMs}ms between requests\n`);
+    console.log(`Rate limit: ${this.config.rateLimitMs}ms between requests`);
+    const skipMode = process.env.SKIP_CRAWLED_PAGES === 'true';
+    if (skipMode) {
+      console.log(`⚠️  Skip mode: ON (will skip already-crawled pages)`);
+    }
+    console.log('');
 
     // Fetch and parse robots.txt
     // Note: We respect robots.txt for allowed/disallowed, but use our configured rate limit
@@ -189,6 +194,11 @@ export class WebCrawler {
       if (extracted.pdfs.length > 0 || extracted.excel.length > 0 || linkCount > 0) {
         console.log(`  Found: ${extracted.pdfs.length} PDF(s), ${extracted.excel.length} Excel, ${extracted.links.length} internal, ${extracted.externalLinks.length} external link(s)`);
       }
+      
+      // Debug: Show queue length periodically
+      if (this.queue.length > 0 && this.results.pagesCrawled % 10 === 0) {
+        console.log(`  📊 Queue: ${this.queue.length} URLs waiting, ${this.results.pagesCrawled} pages crawled so far`);
+      }
 
       // Save page text (skip if already exists)
       if (!alreadyCrawled) {
@@ -231,14 +241,13 @@ export class WebCrawler {
       }
 
       // Add new internal links to queue (if not at max depth)
-      // Only queue pages that haven't been crawled yet (skip already-saved pages)
+      // Queue all internal links (even if already saved) to ensure we discover new content
       if (depth < this.config.maxDepth) {
         for (const link of extracted.links) {
           const normalizedLink = this.normalizeUrl(link);
-          // Skip if already visited in this session OR already saved to disk
-          const alreadyExists = this.visitedUrls.has(normalizedLink) || 
-                                this.storage.hasBeenCrawled(normalizedLink, 'pages');
-          if (!alreadyExists && this.results.pagesCrawled < this.config.maxPages) {
+          // Only skip if already visited in THIS session (to avoid infinite loops)
+          // Don't skip based on disk - we want to process pages to find new links/PDFs
+          if (!this.visitedUrls.has(normalizedLink) && this.results.pagesCrawled < this.config.maxPages) {
             this.visitedUrls.add(normalizedLink);
             this.queue.push({ url: normalizedLink, depth: depth + 1, isExternal: false });
             this.results.linksFound++;
