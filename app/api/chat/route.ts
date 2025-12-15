@@ -11,8 +11,10 @@ let isLoadingDocuments = false; // Prevent concurrent loading
 
 /**
  * Preload document chunks (call this on app startup)
+ * Note: This function is not exported because Next.js route files can only export HTTP handlers
+ * It's kept here for reference but should be called from elsewhere if needed
  */
-export async function preloadDocumentChunks(): Promise<void> {
+async function preloadDocumentChunks(): Promise<void> {
   // Trigger cache load in background (don't await to avoid blocking)
   getDocumentChunks().catch(error => {
     console.error('Background preload error (non-critical):', error);
