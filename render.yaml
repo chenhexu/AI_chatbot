@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: ai-chatbot
+    env: node
+    plan: starter  # Change to 'standard' or 'pro' for production
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: OPENAI_API_KEY
+        sync: false  # Set this in Render dashboard
+      - key: OPENAI_MODEL
+        value: gpt-4.1-nano  # Or your preferred model
+      - key: GOOGLE_SERVICE_ACCOUNT_EMAIL
+        sync: false  # Set this in Render dashboard if using Google Docs
+      - key: GOOGLE_PRIVATE_KEY
+        sync: false  # Set this in Render dashboard if using Google Docs
+    healthCheckPath: /api/health
+    autoDeploy: true  # Auto-deploy on git push
+

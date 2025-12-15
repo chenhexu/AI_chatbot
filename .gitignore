@@ -31,6 +31,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# render (optional - you can commit render.yaml)
+# .render
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
