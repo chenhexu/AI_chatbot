@@ -7,6 +7,17 @@ import { generateChatResponse } from '@/lib/openai';
 let cachedChunks: TextChunk[] | null = null;
 let chunksLastFetched: number = 0;
 const CACHE_DURATION = 60 * 60 * 1000; // 1 hour in milliseconds
+let isLoadingDocuments = false; // Prevent concurrent loading
+
+/**
+ * Preload document chunks (call this on app startup)
+ */
+export async function preloadDocumentChunks(): Promise<void> {
+  // Trigger cache load in background (don't await to avoid blocking)
+  getDocumentChunks().catch(error => {
+    console.error('Background preload error (non-critical):', error);
+  });
+}
 
 /**
  * Get document chunks, using cache if available
@@ -19,13 +30,32 @@ async function getDocumentChunks(): Promise<TextChunk[]> {
     return cachedChunks;
   }
   
+  // If already loading, wait for it to complete
+  if (isLoadingDocuments) {
+    // Wait for loading to complete (poll every 100ms, max 30 seconds)
+    const maxWait = 30000;
+    const pollInterval = 100;
+    let waited = 0;
+    while (isLoadingDocuments && waited < maxWait) {
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+      waited += pollInterval;
+      // Check if cache is now available
+      if (cachedChunks && (Date.now() - chunksLastFetched) < CACHE_DURATION) {
+        return cachedChunks;
+      }
+    }
+    // If still loading after max wait, proceed (might be stuck)
+  }
+  
   // Fetch fresh documents using document loader
   // Document loader handles all formats (Google Docs, PDF, Excel, etc.)
   // and converts them to raw text for RAG
+  isLoadingDocuments = true;
   try {
     const documents = await loadAllDocuments();
     cachedChunks = processDocuments(documents);
-    chunksLastFetched = now;
+    chunksLastFetched = Date.now();
+    console.log(`✅ Loaded ${documents.length} documents, created ${cachedChunks.length} chunks for RAG`);
     return cachedChunks;
   } catch (error) {
     console.error('Error fetching documents:', error);
@@ -34,6 +64,8 @@ async function getDocumentChunks(): Promise<TextChunk[]> {
       return cachedChunks;
     }
     throw error;
+  } finally {
+    isLoadingDocuments = false;
   }
 }
 
@@ -49,8 +81,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get document chunks
+    // Get document chunks (includes scraped data from data/scraped/)
     const chunks = await getDocumentChunks();
+    console.log(`🔍 Processing query with ${chunks.length} total chunks available`);
 
     // Generate response using OpenAI with RAG
     const response = await generateChatResponse(message, chunks);

@@ -8,9 +8,17 @@
     "start": "next start",
     "lint": "next lint",
     "test-rag": "tsx test-rag.ts",
-    "crawl": "tsx scripts/crawl-school-website.ts"
+    "test-recipe": "tsx test-recipe-query.ts",
+    "crawl": "tsx scripts/crawl-school-website.ts",
+    "test-pdf-ocr": "tsx scripts/test-pdf-ocr.ts",
+    "process-pdf-ocr": "tsx scripts/process-pdf-ocr.ts",
+    "test-rag-pipeline": "tsx scripts/test-rag-pipeline.ts",
+    "test-translation": "tsx scripts/test-translation.ts",
+    "test-principal": "tsx scripts/test-principal-query.ts"
   },
   "dependencies": {
+    "@vitalets/google-translate-api": "^9.2.1",
+    "canvas": "^3.2.0",
     "cheerio": "^1.0.0",
     "dotenv": "^16.4.7",
     "googleapis": "^144.0.0",
@@ -18,8 +26,10 @@
     "node-fetch": "^3.3.2",
     "openai": "^4.77.1",
     "pdf-parse": "^1.1.1",
+    "pdfjs-dist": "^3.11.174",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "tesseract.js": "^6.0.1"
   },
   "devDependencies": {
     "@types/cheerio": "^0.22.35",

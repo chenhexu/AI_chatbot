@@ -4,7 +4,7 @@
  */
 export interface DocumentSource {
   id: string;
-  type: 'google-doc' | 'pdf' | 'excel' | 'word' | 'text' | 'url' | 'file';
+  type: 'google-doc' | 'pdf' | 'excel' | 'word' | 'text' | 'url';
   name?: string;
 }
 

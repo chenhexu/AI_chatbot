@@ -2,6 +2,7 @@ export interface TextChunk {
   text: string;
   source: string;
   index: number;
+  pdfUrl?: string; // Original PDF URL/path for PDF text files
 }
 
 /**
@@ -162,7 +163,26 @@ export function chunkText(text: string, chunkSize: number = 1500, overlap: numbe
  * Calculate text similarity score with better differentiation
  * Improved to give much higher scores to chunks with actual relevant content
  */
-export function calculateSimilarity(query: string, text: string): number {
+export function calculateSimilarity(query: string, text: string, source?: string): number {
+  const queryLower = query.toLowerCase();
+  const textLower = text.toLowerCase();
+  
+  // Penalize CSS/JS/minified files - they're not useful content
+  if (source) {
+    const sourceLower = source.toLowerCase();
+    if (sourceLower.includes('.css') || sourceLower.includes('.js') || 
+        sourceLower.includes('.min.') || sourceLower.includes('stylesheet') ||
+        sourceLower.includes('block-library') || sourceLower.includes('metaslider')) {
+      // Reduce score by 80% for CSS/JS files
+      const baseScore = calculateSimilarityInternal(query, text);
+      return baseScore * 0.2;
+    }
+  }
+  
+  return calculateSimilarityInternal(query, text);
+}
+
+function calculateSimilarityInternal(query: string, text: string): number {
   const queryLower = query.toLowerCase();
   const textLower = text.toLowerCase();
   
@@ -209,9 +229,19 @@ export function calculateSimilarity(query: string, text: string): number {
     keyPhrases.push('horaire', 'calendrier', 'grille-matière', 'grille matière', 'horaire des examens', 'horaire des cours');
   }
   
-  // Check for activity-related queries (Bazar vert, Expo Science, etc.)
+  // Check for activity-related queries (Bazar vert, Expo Science, Robotique, etc.)
   if (queryLower.includes('responsable') || queryLower.includes('activité') || queryLower.includes('activite')) {
     keyPhrases.push('responsable', 'activité', 'activite', 'activités', 'activites');
+  }
+  
+  // Check for student life (vie étudiante) queries
+  if (queryLower.includes('vie étudiante') || queryLower.includes('vie etudiant') || queryLower.includes('vie etudiante')) {
+    keyPhrases.push('vie étudiante', 'vie etudiant', 'vie etudiante', 'activités midi', 'activites midi', 'activité midi', 'activite midi');
+  }
+  
+  // Check for specific activity names
+  if (queryLower.includes('robotique') || queryLower.includes('robotics')) {
+    keyPhrases.push('robotique', 'robotics', 'club de robotique', 'club robotique');
   }
   
   // Check for cafeteria/food-related queries
@@ -224,8 +254,22 @@ export function calculateSimilarity(query: string, text: string): number {
     keyPhrases.push('info-parents', 'info parents', 'infos-parents', 'info-parent', 'infos parent');
   }
   
-  if (queryLower.includes('directrice') || queryLower.includes('directeur') || queryLower.includes('directice')) {
-    keyPhrases.push('directrice', 'directeur', 'directice', 'direction', 'mot de la direction');
+  if (queryLower.includes('directrice') || queryLower.includes('directeur') || queryLower.includes('directice') || queryLower.includes('principal')) {
+    keyPhrases.push('directrice', 'directeur', 'directice', 'direction', 'mot de la direction', 'principal', 'principale');
+  }
+  
+  // Check for recipe/ingredient queries
+  if (queryLower.includes('ingrédient') || queryLower.includes('ingredient') || queryLower.includes('recette') || queryLower.includes('recipe')) {
+    keyPhrases.push('ingrédients', 'ingredients', 'recette', 'recipe', 'préparation', 'preparation');
+  }
+  
+  // Check for specific recipe names (cari, curry, lentilles, etc.)
+  if (queryLower.includes('cari') || queryLower.includes('curry') || queryLower.includes('lentille') || queryLower.includes('lentil')) {
+    keyPhrases.push('cari', 'curry', 'lentilles', 'lentils', 'lentille', 'lentil');
+  }
+  
+  if (queryLower.includes('ricardo')) {
+    keyPhrases.push('ricardo');
   }
   
   let keyPhraseMatches = 0;
@@ -249,6 +293,10 @@ export function calculateSimilarity(query: string, text: string): number {
     const wordBoundaryRegex = new RegExp(`\\b${word}\\b`, 'i');
     const isCommonWord = commonWords.has(word);
     
+    // Special handling for activity names - give them very high weight
+    const activityWords = ['robotique', 'robotics', 'improvisation', 'theatre', 'théâtre', 'spectacle', 'bazar', 'expo', 'science', 'math', 'dele', 'fablab', 'journal', 'variétés', 'varietes'];
+    const isActivityWord = activityWords.includes(word.toLowerCase());
+    
     // If query is about "projet personnel", heavily penalize standalone "personnel" matches
     if (isProjetPersonnelQuery && (word === 'personnel' || word === 'personnels')) {
       // Only count if it's part of "projet personnel" phrase, not standalone
@@ -263,8 +311,10 @@ export function calculateSimilarity(query: string, text: string): number {
     }
     
     if (wordBoundaryRegex.test(textLower)) {
-      // Common words get less weight
-      if (isCommonWord) {
+      // Activity words get very high weight
+      if (isActivityWord) {
+        exactMatches += 3.0; // Very high weight for activity names
+      } else if (isCommonWord) {
         exactMatches += 0.3; // Reduced weight for common words
       } else {
         exactMatches++;
@@ -297,9 +347,11 @@ export function calculateSimilarity(query: string, text: string): number {
   const relatedTerms: { [key: string]: string[] } = {
     'personnel': ['personnels', 'membres', 'employés', 'employes', 'staff', 'équipe', 'equipe'],
     'personnels': ['personnel', 'membres', 'employés', 'employes', 'staff', 'équipe', 'equipe'],
-    'directrice': ['directeur', 'direction', 'directrice', 'directice'], // Include common typo
-    'directice': ['directrice', 'directeur', 'direction'], // Handle typo
-    'directeur': ['directrice', 'direction', 'directice'],
+    'directrice': ['directeur', 'direction', 'directrice', 'directice', 'principal', 'principale'], // Include English "principal"
+    'directice': ['directrice', 'directeur', 'direction', 'principal', 'principale'], // Handle typo
+    'directeur': ['directrice', 'direction', 'directice', 'principal', 'principale'],
+    'principal': ['directrice', 'directeur', 'direction', 'principale', 'principal'], // English "principal" maps to French director terms
+    'principale': ['directrice', 'directeur', 'direction', 'principal'],
     'élèves': ['eleves', 'étudiants', 'etudiants', 'students'],
     'étudiants': ['eleves', 'élèves', 'etudiants', 'students'],
     'école': ['ecole', 'collège', 'college', 'établissement', 'etablissement'],
@@ -368,31 +420,79 @@ export function calculateSimilarity(query: string, text: string): number {
   }
   
   // Check for activity/responsable patterns (tables with activities)
-  if (queryLower.includes('responsable') || queryLower.includes('activité') || queryLower.includes('activite')) {
-    // Look for specific activity names in the query (this is the KEY information)
-    const activityNames = queryLower.match(/(?:bazar\s+vert|expo\s+science|expo-science|exposcience|bazar\s+vert)/i);
+  // This handles queries about activities like "robotique", "expo science", etc.
+  const isActivityQuery = queryLower.includes('responsable') || 
+                          queryLower.includes('activité') || 
+                          queryLower.includes('activite') ||
+                          queryLower.includes('activités') ||
+                          queryLower.includes('activites');
+  
+  if (isActivityQuery) {
+    // Common activity names to look for
+    const commonActivities = [
+      'robotique', 'robotics',
+      'bazar vert', 'bazar-vert',
+      'expo science', 'expo-science', 'exposcience',
+      'improvisation', 'impro',
+      'théâtre', 'theatre',
+      'journal étudiant', 'journal etudiant',
+      'spectacle', 'variétés', 'varietes',
+      'coop fab-lab', 'fablab', 'fab-lab',
+      'concours math', 'math',
+      'entraidants', 'informatiques',
+      'école du rock', 'ecole du rock',
+      'examen dele', 'dele',
+    ];
+    
+    // Extract activity name from query - look for any activity name mentioned
+    let queryActivityName: string | null = null;
+    for (const activity of commonActivities) {
+      if (queryLower.includes(activity)) {
+        queryActivityName = activity;
+        break;
+      }
+    }
+    
+    // If no known activity found, try to extract any capitalized word that might be an activity
+    // (e.g., "robotique" in "activite sur la robotique")
+    if (!queryActivityName) {
+      const activityMatch = queryLower.match(/\b(robotique|improvisation|théâtre|theatre|spectacle|journal|bazar|expo|science|math|dele|fablab|fab-lab|coop|entraidants|informatiques|rock|variétés|varietes)\b/i);
+      if (activityMatch) {
+        queryActivityName = activityMatch[1].toLowerCase();
+      }
+    }
+    
     let hasSpecificActivity = false;
     
-    if (activityNames) {
+    if (queryActivityName) {
       // Check if the chunk contains the specific activity name
-      for (const activity of activityNames) {
-        // Create flexible regex that handles spaces, hyphens, case variations
-        const activityRegex = new RegExp(activity.replace(/\s+/g, '[\\s-]+').replace(/science/i, 'science'), 'i');
-        if (activityRegex.test(textLower)) {
-          structuredDataBonus += 1.0; // VERY high bonus for matching specific activity name
-          hasSpecificActivity = true;
-          
-          // Extra bonus if activity name appears with year pattern
-          if (/\d{4}[-–]\d{4}/.test(textLower)) {
-            structuredDataBonus += 0.3;
-          }
-          
-          // Extra bonus if "responsable" appears near the activity name
-          const activityIndex = textLower.search(activityRegex);
-          const contextAround = textLower.substring(Math.max(0, activityIndex - 100), Math.min(textLower.length, activityIndex + 200));
-          if (/responsable/i.test(contextAround)) {
-            structuredDataBonus += 0.4;
-          }
+      // Create flexible regex that handles spaces, hyphens, case variations
+      const activityRegex = new RegExp(queryActivityName.replace(/\s+/g, '[\\s-]+'), 'i');
+      
+      if (activityRegex.test(textLower)) {
+        structuredDataBonus += 1.0; // VERY high bonus for matching specific activity name
+        hasSpecificActivity = true;
+        
+        // Extra bonus if activity name appears with a person's name (table structure)
+        const activityIndex = textLower.search(activityRegex);
+        const contextAround = textLower.substring(
+          Math.max(0, activityIndex - 150), 
+          Math.min(textLower.length, activityIndex + 300)
+        );
+        
+        // Check for person name pattern near activity (e.g., "Robotique Marcel Laguerre")
+        if (/[A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞ][a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþ]+\s+[A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞ][a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþ]+/.test(contextAround)) {
+          structuredDataBonus += 0.5; // High bonus for activity + person name (table structure)
+        }
+        
+        // Extra bonus if "responsable" appears near the activity name
+        if (/responsable/i.test(contextAround)) {
+          structuredDataBonus += 0.4;
+        }
+        
+        // Bonus for time/date patterns near activity (e.g., "Jours 2 le midi de 11h45")
+        if (/(?:jours?|jour)\s+\d+|de\s+\d+h\d+|à\s+\d+h\d+/.test(contextAround)) {
+          structuredDataBonus += 0.3;
         }
       }
     }
@@ -402,14 +502,49 @@ export function calculateSimilarity(query: string, text: string): number {
     if (!hasSpecificActivity) {
       // Look for "responsable" + activity pattern (but lower weight)
       if (/responsable.*activité|activité.*responsable/i.test(textLower)) {
-        structuredDataBonus += 0.2; // Reduced from 0.4
+        structuredDataBonus += 0.2;
       }
       
       // Look for table-like patterns (but lower weight)
-      const activityTablePattern = /(?:bazar|expo|science|vert).*\d{4}[-–]\d{4}/i;
+      const activityTablePattern = /(?:bazar|expo|science|vert|robotique|improvisation).*\d{4}[-–]\d{4}/i;
       if (activityTablePattern.test(textLower)) {
-        structuredDataBonus += 0.15; // Reduced from 0.3
+        structuredDataBonus += 0.15;
       }
+    }
+  }
+  
+  // Check for recipe/ingredient patterns
+  if (queryLower.includes('ingrédient') || queryLower.includes('ingredient') || queryLower.includes('recette') || queryLower.includes('recipe')) {
+    // Look for ingredient lists (common patterns: numbered lists, bullet points, measurements)
+    if (/ingrédients?|ingredients?/i.test(textLower)) {
+      structuredDataBonus += 0.6; // High bonus for ingredient sections
+    }
+    
+    // Look for recipe structure (ingredients + preparation)
+    if (/ingrédients?.*préparation|ingredients?.*preparation|ingrédients?.*cuisson/i.test(textLower)) {
+      structuredDataBonus += 0.4; // Bonus for complete recipe structure
+    }
+    
+    // Look for measurements and quantities (common in recipes)
+    if (/\d+\s*(ml|g|kg|tasse|c\.?\s*à\s*soupe|c\.?\s*à\s*thé|oz|cup)/i.test(textLower)) {
+      structuredDataBonus += 0.3; // Bonus for recipe measurements
+    }
+  }
+  
+  // Check for specific recipe name matches (cari de lentilles, etc.)
+  if (queryLower.includes('cari') || queryLower.includes('curry')) {
+    if (/cari\s+de\s+lentilles|cari\s+de\s+pommes|curry.*lentil/i.test(textLower)) {
+      structuredDataBonus += 1.0; // Maximum bonus for exact recipe match
+    }
+    if (/lentilles.*pommes|pommes.*lentilles|lentil.*potato/i.test(textLower)) {
+      structuredDataBonus += 0.7; // High bonus for recipe components
+    }
+  }
+  
+  // Check for Ricardo brand matches
+  if (queryLower.includes('ricardo')) {
+    if (/ricardo/i.test(textLower)) {
+      structuredDataBonus += 0.5; // Bonus for Ricardo brand
     }
   }
   
@@ -445,32 +580,25 @@ export function calculateSimilarity(query: string, text: string): number {
     }
   }
   
-  // Check for director/leadership patterns - THIS IS THE KEY MATCH
-  // BUT only if NOT asking about "projet personnel" (to avoid false matches)
-  if ((queryLower.includes('directrice') || queryLower.includes('directeur') || queryLower.includes('directice')) 
-      && !queryLower.includes('projet personnel')) {
-    // Pattern: "Name,\nDirectrice" or "Name, Directrice" or "Name:\nDirectrice"
+  // Check for director/principal queries - look for name + title patterns
+  const isDirectorQuery = queryLower.includes('directrice') || 
+                          queryLower.includes('directeur') || 
+                          queryLower.includes('directice') ||
+                          queryLower.includes('principal');
+  
+  if (isDirectorQuery && !queryLower.includes('projet personnel')) {
+    // Pattern: "Name,\nDirectrice" or "Name, Directrice" or "Name:\nDirectrice" or "Directrice: Name"
     // This is the most important pattern - it contains the actual answer
-    const directorPattern = /[A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞ][a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþ]+(?:\s+[A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞ][a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþ]+)*\s*[,:\n]\s*(?:directrice|directeur|directice)/gi;
+    const directorPattern = /(?:[A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞ][a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþ]+(?:\s+[A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞ][a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþ]+)*\s*[,:\n\-]\s*(?:directrice|directeur|directice)|(?:directrice|directeur|directice)\s*[,:\n\-]\s*[A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞ][a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþ]+(?:\s+[A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞ][a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþ]+)*)/gi;
     const directorMatches = text.match(directorPattern);
     if (directorMatches && directorMatches.length > 0) {
-      // This is the actual answer - give it maximum bonus
-      structuredDataBonus += 0.8; // Very high bonus for name + title pattern
-      
-      // Additional bonus if it's at the start of the chunk (more likely to be the answer)
-      const firstMatch = directorMatches[0];
-      const matchPosition = text.indexOf(firstMatch);
-      const chunkLength = text.length;
-      if (matchPosition < chunkLength * 0.2) {
-        // If the match is in the first 20% of the chunk, it's likely the main content
-        structuredDataBonus += 0.15;
-      }
+      // This is the actual answer - give it high score boost
+      structuredDataBonus += 0.5; // High bonus for name + title pattern
     }
     
     // Also check for "MOT DE LA DIRECTION" heading (message from director)
-    // But give less weight than the actual name+title pattern
     if (/mot\s+de\s+la\s+direction/i.test(textLower)) {
-      structuredDataBonus += 0.1; // Reduced from 0.2
+      structuredDataBonus += 0.2;
     }
   }
   
@@ -559,7 +687,7 @@ export function findRelevantChunks(
   // Calculate similarity scores
   const scoredChunks = chunks.map(chunk => ({
     chunk,
-    score: calculateSimilarity(query, chunk.text),
+    score: calculateSimilarity(query, chunk.text, chunk.source),
   }));
   
   // Sort by score (descending)
@@ -585,7 +713,7 @@ export function findRelevantChunks(
 /**
  * Process documents into chunks
  */
-export function processDocuments(documents: Array<{ id: string; content: string }>): TextChunk[] {
+export function processDocuments(documents: Array<{ id: string; content: string; pdfUrl?: string }>): TextChunk[] {
   const allChunks: TextChunk[] = [];
   
   for (const doc of documents) {
@@ -595,6 +723,7 @@ export function processDocuments(documents: Array<{ id: string; content: string 
         text: chunk,
         source: doc.id,
         index,
+        pdfUrl: doc.pdfUrl,
       });
     });
   }
@@ -614,14 +743,38 @@ export function buildContextString(chunks: TextChunk[]): string {
   // Limit each chunk to ~300K characters (~75K tokens) to stay within limits
   const MAX_CHUNK_LENGTH = 300000;
   
-  return chunks
-    .map((chunk, index) => {
-      const chunkText = chunk.text.length > MAX_CHUNK_LENGTH
-        ? chunk.text.substring(0, MAX_CHUNK_LENGTH) + '\n\n[Chunk truncated...]'
-        : chunk.text;
-      return `[Context ${index + 1}]\n${chunkText}`;
-    })
-    .join('\n\n---\n\n');
+  // Collect unique PDF URLs
+  const pdfUrls = new Set<string>();
+  chunks.forEach(chunk => {
+    if (chunk.pdfUrl) {
+      pdfUrls.add(chunk.pdfUrl);
+    }
+  });
+  
+  const contextParts = chunks.map((chunk, index) => {
+    const chunkText = chunk.text.length > MAX_CHUNK_LENGTH
+      ? chunk.text.substring(0, MAX_CHUNK_LENGTH) + '\n\n[Chunk truncated...]'
+      : chunk.text;
+    let contextPart = `[Context ${index + 1}]\n${chunkText}`;
+    if (chunk.pdfUrl) {
+      contextPart += `\n[Source PDF: ${chunk.pdfUrl}]`;
+    }
+    return contextPart;
+  });
+  
+  let context = contextParts.join('\n\n---\n\n');
+  
+  // Add PDF links section at the end if any exist
+  if (pdfUrls.size > 0) {
+    context += '\n\n---\n\n[PDF Documents disponibles:]\n';
+    Array.from(pdfUrls).forEach((url, idx) => {
+      // Extract filename from file://pdfs/filename.pdf
+      const fileName = url.replace('file://', '').split('/').pop() || url;
+      context += `${idx + 1}. ${fileName}\n   Lien de téléchargement: /api/pdf/${fileName}\n`;
+    });
+  }
+  
+  return context;
 }
 
 

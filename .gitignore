@@ -47,8 +47,18 @@ service-account*.json
 # scraped data
 /data/scraped/
 !data/scraped/.gitkeep
+# OCR cache (old JSON format, generated files, don't commit)
+/data/scraped/ocr-cache/
+# PDF texts (OCR results as .txt files, generated files, don't commit)
+/data/scraped/pdf-texts/
 
 # logs
 /logs/
 
+# OCR training data (large files)
+*.traineddata
+
+# Test files (optional - you may want to keep these)
+# test-*.ts
+# scripts/test-*.ts
 

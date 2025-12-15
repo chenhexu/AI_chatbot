@@ -21,6 +21,7 @@ export default function ChatInterface() {
   ]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isPreloading, setIsPreloading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -31,6 +32,22 @@ export default function ChatInterface() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Preload documents when component mounts
+  useEffect(() => {
+    // Trigger document preload in background
+    const startTime = Date.now();
+    fetch('/api/chat', { method: 'GET' })
+      .then(() => {
+        const loadTime = ((Date.now() - startTime) / 1000).toFixed(1);
+        console.log(`✅ Documents preloaded successfully (${loadTime}s)`);
+        setIsPreloading(false);
+      })
+      .catch((error) => {
+        console.warn('⚠️ Document preload failed (non-critical):', error);
+        setIsPreloading(false);
+      });
+  }, []);
 
   const handleSend = async () => {
     if (!inputValue.trim() || isLoading) return;
@@ -69,9 +86,15 @@ export default function ChatInterface() {
 
       setMessages((prev) => [...prev, botMessage]);
     } catch (error) {
+      // Detect language from user message
+      const isEnglish = /^(hi|hello|who|what|where|when|why|how|can|will|would|should|could|the|is|are|do|does|did)/i.test(userMessage.text);
+      const errorText = isEnglish
+        ? 'Sorry, an error occurred. Please try again.'
+        : 'Désolé, une erreur s\'est produite. Veuillez réessayer.';
+      
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: 'Désolé, une erreur s\'est produite. Veuillez réessayer.',
+        text: errorText,
         isUser: false,
         timestamp: new Date(),
       };
@@ -114,6 +137,20 @@ export default function ChatInterface() {
       {/* Messages Container */}
       <div className="flex-1 overflow-y-auto px-4 py-6">
         <div className="max-w-4xl mx-auto space-y-4">
+          {isPreloading && (
+            <div className="flex justify-center items-center py-8">
+              <div className="bg-white rounded-2xl px-6 py-4 shadow-sm">
+                <div className="flex items-center space-x-3">
+                  <div className="flex space-x-2">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+                  </div>
+                  <span className="text-sm text-gray-600">Chargement des documents...</span>
+                </div>
+              </div>
+            </div>
+          )}
           {messages.map((message) => (
             <MessageBubble key={message.id} message={message} />
           ))}

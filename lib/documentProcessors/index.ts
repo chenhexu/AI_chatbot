@@ -14,11 +14,13 @@ class DocumentProcessorRegistry {
 
   constructor() {
     // Register all available processors
+    // IMPORTANT: Order matters! More specific processors should come first
+    // FileProcessor must come before TextProcessor to handle file:// URLs
     this.register(new GoogleDocsProcessor());
     this.register(new PDFProcessor());
     this.register(new ExcelProcessor());
+    this.register(new FileProcessor()); // Must come before TextProcessor
     this.register(new TextProcessor());
-    this.register(new FileProcessor());
   }
 
   /**
@@ -67,14 +69,24 @@ class DocumentProcessorRegistry {
           processed.push(result.value);
         }
       } else {
-        // Only log errors that aren't expected (like missing service account)
+        // Only log errors that aren't expected (like missing service account, PDF parsing issues)
         const errorMsg = result.reason?.message || String(result.reason);
         const sourceId = sources[index].id;
-        if (!errorMsg.includes('Service account') && !errorMsg.includes('not configured')) {
-          // Log full source ID without truncation
+        const isExpectedError = 
+          errorMsg.includes('Service account') || 
+          errorMsg.includes('not configured') ||
+          errorMsg.includes('ENOENT') ||
+          errorMsg.includes('no such file or directory') ||
+          errorMsg.includes('Error parsing PDF'); // PDF errors are handled gracefully
+        
+        if (!isExpectedError) {
+          // Log full source ID without truncation for unexpected errors only
           console.error(`Error processing document (full source: ${sourceId}):`, result.reason);
         }
-        errors.push(new Error(`Failed to process ${sourceId}: ${errorMsg}`));
+        // Don't push to errors array for expected errors - they're handled gracefully
+        if (!isExpectedError) {
+          errors.push(new Error(`Failed to process ${sourceId}: ${errorMsg}`));
+        }
       }
     });
 

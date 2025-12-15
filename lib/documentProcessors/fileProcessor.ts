@@ -9,12 +9,20 @@ import { DocumentProcessor, DocumentSource, ProcessedDocument } from './types';
 export class FileProcessor implements DocumentProcessor {
   private baseDir: string;
 
-  constructor(baseDir: string = './data/scraped') {
-    this.baseDir = path.resolve(process.cwd(), baseDir);
+  constructor(baseDir?: string) {
+    // Use the same baseDir as documentLoader for consistency
+    const defaultDir = process.env.CRAWLER_DATA_FOLDER || './data/scraped';
+    this.baseDir = path.resolve(process.cwd(), baseDir || defaultDir);
   }
 
   canProcess(source: DocumentSource): boolean {
-    return source.type === 'file' || (source.type === 'url' && source.id.startsWith('file://'));
+    // Prioritize file:// URLs - this processor handles actual file reading
+    // Must come before TextProcessor in registry order
+    if (source.id.startsWith('file://')) {
+      return true;
+    }
+    // Also handle text type if it's a file path (fallback)
+    return source.type === 'text' && source.id.includes('/') && !source.id.startsWith('http');
   }
 
   async process(source: DocumentSource): Promise<ProcessedDocument> {
@@ -27,7 +35,7 @@ export class FileProcessor implements DocumentProcessor {
       throw new Error(`File not found (source: ${source.id}, path: ${fullPath})`);
     }
 
-    // Read file content
+    // Read file content - keep all content, let RAG similarity matching filter
     const content = fs.readFileSync(fullPath, 'utf8');
     
     return {
@@ -44,15 +52,17 @@ export class FileProcessor implements DocumentProcessor {
   /**
    * Get all available files in the scraped folder
    */
-  static getAvailableFiles(baseDir: string = './data/scraped'): Array<{ path: string; category: string }> {
-    const resolvedDir = path.resolve(process.cwd(), baseDir);
+  static getAvailableFiles(baseDir?: string): Array<{ path: string; category: string }> {
+    // Use the same baseDir as documentLoader for consistency
+    const defaultDir = process.env.CRAWLER_DATA_FOLDER || './data/scraped';
+    const resolvedDir = path.resolve(process.cwd(), baseDir || defaultDir);
     const files: Array<{ path: string; category: string }> = [];
 
     if (!fs.existsSync(resolvedDir)) {
       return files;
     }
 
-    const categories = ['pages', 'pdfs', 'excel', 'images', 'other', 'external'];
+    const categories = ['pages', 'pdfs', 'pdf-texts', 'excel', 'images', 'other', 'external'];
     
     for (const category of categories) {
       const categoryDir = path.join(resolvedDir, category);

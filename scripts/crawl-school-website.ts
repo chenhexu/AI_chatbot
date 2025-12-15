@@ -9,9 +9,9 @@ async function main() {
   
   const crawler = new WebCrawler({
     startUrl,
-    maxDepth: parseInt(process.env.CRAWLER_MAX_DEPTH || '5'),
+    maxDepth: parseInt(process.env.CRAWLER_MAX_DEPTH || '4'),
     maxPages: parseInt(process.env.CRAWLER_MAX_PAGES || '2000'),
-    rateLimitMs: parseInt(process.env.CRAWLER_RATE_LIMIT_MS || '1000'), // 1 second per request
+    rateLimitMs: parseInt(process.env.CRAWLER_RATE_LIMIT_MS || '3000'), // 3 seconds per request (safe for burstable instances)
     userAgent: 'Collège-Saint-Louis-Crawler/1.0',
     dataFolder: process.env.CRAWLER_DATA_FOLDER || './data/scraped',
   });

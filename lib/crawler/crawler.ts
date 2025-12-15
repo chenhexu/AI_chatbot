@@ -2,6 +2,7 @@ import * as path from 'path';
 import { RobotsParser } from './robotsParser';
 import { ContentExtractor, type ExtractedContent } from './contentExtractor';
 import { StorageManager, type CrawlIndex, type CrawlMetadata } from './storage';
+import { ResourceMonitor } from './resourceMonitor';
 
 export interface CrawlerConfig {
   startUrl: string;
@@ -29,6 +30,7 @@ export class WebCrawler {
   private storage: StorageManager;
   private visitedUrls: Set<string> = new Set();
   private queue: Array<{ url: string; depth: number; isExternal?: boolean }> = [];
+  private resourceMonitor: ResourceMonitor;
   
   /**
    * Normalize URL by removing fragments (e.g., #:~:text=...)
@@ -52,9 +54,9 @@ export class WebCrawler {
 
   constructor(config: CrawlerConfig) {
     this.config = {
-      maxDepth: 5, // Default depth for crawling
+      maxDepth: 4, // Default depth for crawling (reduced to 4)
       maxPages: 2000, // Increased to crawl more pages
-      rateLimitMs: 1000, // 1 second per request for faster crawling
+      rateLimitMs: 3000, // 3 seconds per request to avoid CPU exhaustion on burstable instances
       userAgent: 'Collège-Saint-Louis-Crawler/1.0',
       dataFolder: './data/scraped',
       ...config,
@@ -62,6 +64,15 @@ export class WebCrawler {
 
     this.contentExtractor = new ContentExtractor(this.config.startUrl);
     this.storage = new StorageManager(this.config.dataFolder);
+    
+    // Initialize resource monitor with safe thresholds
+    // Stops before resources are exhausted so SSH still works
+    this.resourceMonitor = new ResourceMonitor(
+      this.config.dataFolder,
+      80, // CPU threshold: 80% (stops before 100%)
+      80, // Memory threshold: 80% (stops before 100%)
+      85  // Disk threshold: 85% (stops before 100%)
+    );
   }
 
   /**
@@ -97,8 +108,29 @@ export class WebCrawler {
     // Track which URLs we've processed in this session (to avoid re-processing)
     const processedInSession = new Set<string>();
 
+    // Initial resource check
+    console.log('🔍 Initial resource check...');
+    console.log(this.resourceMonitor.getReport());
+    console.log('');
+
     // Process queue
     while (this.queue.length > 0 && this.results.pagesCrawled < this.config.maxPages) {
+      // Check resources every 10 pages
+      if (this.results.pagesCrawled > 0 && this.results.pagesCrawled % 10 === 0) {
+        const stats = this.resourceMonitor.checkResources();
+        console.log(`\n${this.resourceMonitor.getReport()}`);
+        
+        if (!stats.isHealthy) {
+          console.log('\n⚠️  RESOURCE LIMITS EXCEEDED - Stopping crawler to prevent system overload');
+          console.log('   This ensures SSH access remains available.');
+          console.log(`\n📊 Final Stats:`);
+          console.log(`   Pages crawled: ${this.results.pagesCrawled}`);
+          console.log(`   Files downloaded: ${this.results.filesDownloaded}`);
+          console.log(`   Links found: ${this.results.linksFound}`);
+          console.log(`   Errors: ${this.results.errors}`);
+          break;
+        }
+      }
       const { url, depth, isExternal = false } = this.queue.shift()!;
 
       if (depth > this.config.maxDepth) {
@@ -138,7 +170,15 @@ export class WebCrawler {
       try {
         await this.crawlPage(normalizedUrl, depth, alreadyCrawled, isExternal);
         processedInSession.add(normalizedUrl); // Mark as processed after crawling
-        await this.delay(this.config.rateLimitMs);
+        
+        // Add periodic longer pause every 20 pages to let CPU recover (for burstable instances)
+        const pagesSinceLastPause = this.results.pagesCrawled % 20;
+        if (pagesSinceLastPause === 0 && this.results.pagesCrawled > 0) {
+          console.log('⏸️  Taking a 10-second pause to let CPU recover...');
+          await this.delay(10000); // 10 second pause every 20 pages
+        } else {
+          await this.delay(this.config.rateLimitMs);
+        }
       } catch (error) {
         console.error(`Error crawling ${normalizedUrl}:`, error);
         this.results.errors++;
