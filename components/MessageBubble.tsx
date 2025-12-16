@@ -59,7 +59,13 @@ function renderTextWithLinks(text: string, isUser: boolean) {
     parts.push(text.substring(lastIndex));
   }
 
-  return parts.length > 0 ? parts : text;
+  // Always return an array to avoid hydration mismatches
+  // If no URLs found, return array with just the text
+  if (parts.length === 0) {
+    return [text];
+  }
+  
+  return parts;
 }
 
 export default function MessageBubble({ message }: MessageBubbleProps) {

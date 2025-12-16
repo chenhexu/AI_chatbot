@@ -61,7 +61,20 @@ service-account*.json
 # OCR training data (large files)
 *.traineddata
 
-# Test files (optional - you may want to keep these)
-# test-*.ts
-# scripts/test-*.ts
+# Test files and scripts (not needed for production)
+test-*.ts
+scripts/test-*.ts
+scripts/test-*.ps1
+debug-files.ts
+start-crawler.sh
+ecosystem.config.js
+
+# Documentation (personal notes, not needed for deployment)
+docs/AWS_BILLING_*.md
+docs/CHECK_RESOURCES.md
+docs/CLEAN_START.md
+
+# Service account files (should be in environment variables)
+college-saint-louis-docs-*.json
+service-account-oneline.json
 
