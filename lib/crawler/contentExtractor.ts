@@ -28,7 +28,7 @@ export class ContentExtractor {
    * Extract all content from HTML
    */
   extract(html: string, pageUrl: string): ExtractedContent {
-    const $ = cheerio.load(html);
+    const $ = cheerio.load(html) as cheerio.CheerioAPI;
     
     // Remove scripts, styles, and other non-content elements
     $('script, style, noscript, iframe, embed, object').remove();
