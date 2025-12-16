@@ -178,8 +178,10 @@ export class PDFProcessor implements DocumentProcessor {
       
       // PDF has no extractable text or pdf-parse failed - use OCR
       // Dynamically import pdfjs-dist legacy build (Node.js compatible)
+      // Construct path dynamically to avoid Next.js static analysis
       // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
+      const pdfjsPath = ['pdfjs-dist', 'legacy', 'build', 'pdf.js'].join('/');
+      const pdfjsLib = require(pdfjsPath);
       
       // Get page count first - convert Buffer to Uint8Array
       const loadingTask = pdfjsLib.getDocument({ data: uint8Array });

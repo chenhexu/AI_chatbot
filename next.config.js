@@ -3,7 +3,7 @@ const nextConfig = {
   reactStrictMode: true,
   // Exclude native Node.js modules from server-side bundling
   serverExternalPackages: ['canvas', 'pdfjs-dist', 'tesseract.js', 'pdf-parse'],
-  webpack: (config, { isServer }) => {
+  webpack: (config, { isServer, webpack }) => {
     // Node.js-only libraries (pdfjs-dist, canvas, tesseract.js) only used in API routes
     if (!isServer) {
       // On client, make sure these Node.js modules aren't bundled
@@ -26,6 +26,9 @@ const nextConfig = {
           'tesseract.js',
         ];
       }
+      
+      // Note: pdfjs-dist/legacy/build/pdf.js is loaded dynamically at runtime
+      // The dynamic require() with join() prevents Next.js from statically analyzing it
     }
     
     return config;

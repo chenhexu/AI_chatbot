@@ -70,8 +70,8 @@ async function testPDFOCR() {
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       
       console.log(`\n✅ OCR completed in ${elapsed}s`);
-      console.log(`   Pages: ${result.metadata.pageCount}`);
-      console.log(`   Words: ${result.metadata.wordCount}`);
+      console.log(`   Pages: ${result.metadata?.pageCount ?? 0}`);
+      console.log(`   Words: ${result.metadata?.wordCount ?? 0}`);
       console.log(`   Content length: ${result.content.length} characters`);
       
       // Display first 500 characters of extracted text
