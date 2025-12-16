@@ -23,9 +23,7 @@ services:
     healthCheckPath: /api/health
     autoDeploy: true  # Auto-deploy on git push
 
-  - type: pgsql  # PostgreSQL database
+  - type: pg  # PostgreSQL database
     name: ai-chatbot-db
     plan: starter  # Free tier available
-    databaseName: ai_chatbot
-    databaseUser: ai_chatbot_user
 
