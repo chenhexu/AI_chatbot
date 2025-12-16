@@ -73,7 +73,7 @@ export class ContentExtractor {
       'body' // Fallback to body
     ];
 
-    let $content: cheerio.Cheerio<cheerio.Element> | null = null;
+    let $content: cheerio.Cheerio | null = null;
     for (const selector of selectors) {
       const element = $(selector).first();
       if (element.length > 0) {
