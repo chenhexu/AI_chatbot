@@ -83,14 +83,15 @@ export async function generateChatResponse(
   
   // Use both original and translated query for chunk finding
   // This ensures we find relevant chunks regardless of language
-  const relevantChunksOriginal = findRelevantChunks(documentChunks, userMessage, 3);
-  const relevantChunksTranslated = findRelevantChunks(documentChunks, translatedQuery, 3);
+  // Retrieve more chunks to ensure we get director name patterns even if they score slightly lower
+  const relevantChunksOriginal = findRelevantChunks(documentChunks, userMessage, 5);
+  const relevantChunksTranslated = findRelevantChunks(documentChunks, translatedQuery, 5);
   
   // Combine and deduplicate chunks
   const allChunks = [...relevantChunksOriginal, ...relevantChunksTranslated];
   const uniqueChunks = Array.from(
     new Map(allChunks.map(chunk => [chunk.source + chunk.index, chunk])).values()
-  ).slice(0, 5); // Take top 5 unique chunks
+  ).slice(0, 8); // Take top 8 unique chunks to ensure director name patterns are included
   const context = buildContextString(uniqueChunks);
   
   // Limit context size to avoid token limit errors

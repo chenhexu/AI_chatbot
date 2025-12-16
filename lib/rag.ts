@@ -592,13 +592,13 @@ function calculateSimilarityInternal(query: string, text: string): number {
     const directorPattern = /(?:[A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞ][a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþ]+(?:\s+[A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞ][a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþ]+)*\s*[,:\n\-]\s*(?:directrice|directeur|directice)|(?:directrice|directeur|directice)\s*[,:\n\-]\s*[A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞ][a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþ]+(?:\s+[A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞ][a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþ]+)*)/gi;
     const directorMatches = text.match(directorPattern);
     if (directorMatches && directorMatches.length > 0) {
-      // This is the actual answer - give it high score boost
-      structuredDataBonus += 0.5; // High bonus for name + title pattern
+      // This is the actual answer - give it VERY high score boost to prioritize these chunks
+      structuredDataBonus += 2.0; // Very high bonus for name + title pattern (was 0.5)
     }
     
     // Also check for "MOT DE LA DIRECTION" heading (message from director)
     if (/mot\s+de\s+la\s+direction/i.test(textLower)) {
-      structuredDataBonus += 0.2;
+      structuredDataBonus += 0.3; // Increased from 0.2
     }
   }
   
