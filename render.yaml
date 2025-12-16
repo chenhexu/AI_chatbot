@@ -12,10 +12,20 @@ services:
         sync: false  # Set this in Render dashboard
       - key: OPENAI_MODEL
         value: gpt-4.1-nano  # Or your preferred model
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ai-chatbot-db
+          property: connectionString
       - key: GOOGLE_SERVICE_ACCOUNT_EMAIL
         sync: false  # Set this in Render dashboard if using Google Docs
       - key: GOOGLE_PRIVATE_KEY
         sync: false  # Set this in Render dashboard if using Google Docs
     healthCheckPath: /api/health
     autoDeploy: true  # Auto-deploy on git push
+
+  - type: pgsql  # PostgreSQL database
+    name: ai-chatbot-db
+    plan: starter  # Free tier available
+    databaseName: ai_chatbot
+    databaseUser: ai_chatbot_user
 

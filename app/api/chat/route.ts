@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { loadAllDocuments } from '@/lib/documentLoader';
 import { processDocuments, type TextChunk } from '@/lib/rag';
 import { generateChatResponse } from '@/lib/openai';
+import { loadAllChunks } from '@/lib/database/documentStore';
 
 // Cache document chunks in memory (in production, consider using Redis or similar)
 let cachedChunks: TextChunk[] | null = null;
@@ -49,15 +50,32 @@ async function getDocumentChunks(): Promise<TextChunk[]> {
     // If still loading after max wait, proceed (might be stuck)
   }
   
-  // Fetch fresh documents using document loader
-  // Document loader handles all formats (Google Docs, PDF, Excel, etc.)
-  // and converts them to raw text for RAG
+  // Try to load from database first (production mode)
+  // Fall back to filesystem if database is not available
   isLoadingDocuments = true;
   try {
+    // Check if DATABASE_URL is set (database mode)
+    if (process.env.DATABASE_URL) {
+      try {
+        const dbChunks = await loadAllChunks();
+        if (dbChunks.length > 0) {
+          cachedChunks = dbChunks;
+          chunksLastFetched = Date.now();
+          console.log(`✅ Loaded ${dbChunks.length} chunks from database`);
+          return cachedChunks;
+        } else {
+          console.log('⚠️  Database is empty, falling back to filesystem...');
+        }
+      } catch (dbError) {
+        console.warn('⚠️  Database error, falling back to filesystem:', dbError);
+      }
+    }
+
+    // Fallback to filesystem (development or if database is empty)
     const documents = await loadAllDocuments();
     cachedChunks = processDocuments(documents);
     chunksLastFetched = Date.now();
-    console.log(`✅ Loaded ${documents.length} documents, created ${cachedChunks.length} chunks for RAG`);
+    console.log(`✅ Loaded ${documents.length} documents from filesystem, created ${cachedChunks.length} chunks for RAG`);
     return cachedChunks;
   } catch (error) {
     console.error('Error fetching documents:', error);

@@ -1,6 +1,6 @@
 # Collège Saint-Louis AI Chatbot
 
-An AI-powered chatbot for Collège Saint-Louis that answers questions about the school using information from scraped website data, PDFs, and Google Docs. Built with Next.js, TypeScript, and OpenAI GPT-4.1 nano.
+An AI-powered chatbot for Collège Saint-Louis that answers questions about the school using information from scraped website data, PDFs, and Google Docs. Built with Next.js, TypeScript, OpenAI GPT-4.1 nano, and PostgreSQL.
 
 ## Features
 
@@ -10,6 +10,7 @@ An AI-powered chatbot for Collège Saint-Louis that answers questions about the 
   - PDF documents (with OCR support)
   - Google Docs
   - External pages
+- 💾 PostgreSQL database for document storage (no filesystem needed in production)
 - 💬 Modern, full-page chat interface
 - 🌐 Multilingual support (English/French) with automatic translation
 - 📄 PDF download links for activities and documents
@@ -20,6 +21,7 @@ An AI-powered chatbot for Collège Saint-Louis that answers questions about the 
 
 - Node.js 18+ and npm
 - OpenAI API key
+- PostgreSQL database (for production) or local filesystem (for development)
 - (Optional) Google Service Account JSON key file for Google Docs integration
 
 ## Setup Instructions
@@ -32,14 +34,17 @@ npm install
 
 ### 2. Configure Environment Variables
 
-Create a `.env.local` file in the root directory with the following variables:
+Create a `.env.local` file in the root directory:
 
 ```env
 # AI Configuration
 OPENAI_API_KEY=your_openai_api_key_here
 OPENAI_MODEL=gpt-4.1-nano
 
-# Data Folder (optional, defaults to ./data/scraped)
+# Database (for production - Render will set this automatically)
+DATABASE_URL=postgresql://user:password@host:port/database
+
+# Data Folder (for development, optional)
 CRAWLER_DATA_FOLDER=./data/scraped
 
 # Google API Configuration (optional, for Google Docs)
@@ -47,15 +52,33 @@ GOOGLE_SERVICE_ACCOUNT_EMAIL=your-service-account@email.com
 GOOGLE_PRIVATE_KEY=your_private_key_here
 ```
 
-### 3. Prepare Data
+### 3. Database Setup
 
-The chatbot uses data from the `data/scraped/` folder:
-- `pages/` - Scraped HTML pages
-- `pdf-texts/` - PDF documents converted to text (via OCR)
-- `external/` - External pages
-- `pdfs/` - Original PDF files
+#### For Production (Render):
+1. The `render.yaml` file is configured to automatically create a PostgreSQL database
+2. The `DATABASE_URL` will be automatically set by Render
+3. Run the migration script after first deployment (see below)
 
-### 4. Run the Development Server
+#### For Development:
+1. Install PostgreSQL locally or use a cloud database
+2. Set `DATABASE_URL` in your `.env.local`
+3. Run the migration script to import your local data
+
+### 4. Migrate Data to Database
+
+If you have existing data in `data/scraped/`, migrate it to the database:
+
+```bash
+npm run migrate-db
+```
+
+This will:
+- Create the database schema
+- Import all documents from `data/scraped/`
+- Process them into chunks
+- Store everything in PostgreSQL
+
+### 5. Run the Development Server
 
 ```bash
 npm run dev
@@ -77,9 +100,13 @@ Open [http://localhost:3000](http://localhost:3000) in your browser to see the c
 │   ├── layout.tsx         # Root layout
 │   └── page.tsx           # Main page
 ├── components/
-│   ├── ChatInterface.tsx   # Main chat UI component
+│   ├── ChatInterface.tsx  # Main chat UI component
 │   └── MessageBubble.tsx  # Message display component
 ├── lib/
+│   ├── database/          # Database layer
+│   │   ├── client.ts      # PostgreSQL connection
+│   │   ├── documentStore.ts # Document storage functions
+│   │   └── schema.sql     # Database schema
 │   ├── documentLoader.ts  # Document loading and processing
 │   ├── documentProcessors/ # Document processors (PDF, text, etc.)
 │   ├── rag.ts            # RAG implementation (chunking, retrieval)
@@ -87,31 +114,34 @@ Open [http://localhost:3000](http://localhost:3000) in your browser to see the c
 │   └── crawler/          # Web crawler implementation
 ├── scripts/
 │   ├── crawl-school-website.ts  # Crawler script
-│   └── process-pdf-ocr.ts       # PDF OCR processing
+│   ├── process-pdf-ocr.ts       # PDF OCR processing
+│   └── migrate-to-database.ts  # Database migration script
 └── data/
-    └── scraped/          # Scraped data (not committed)
+    └── scraped/          # Scraped data (development only, not committed)
 ```
 
 ## How It Works
 
-1. **Document Loading**: The application loads documents from multiple sources:
-   - Scraped HTML pages from the school website
-   - PDF documents (with OCR for scanned PDFs)
-   - Google Docs (if configured)
-   - External pages
+1. **Document Storage**: Documents are stored in PostgreSQL database (production) or filesystem (development)
+   - Documents table: stores full document content and metadata
+   - Chunks table: stores processed text chunks for RAG
 
-2. **Text Chunking**: Documents are split into manageable chunks (1500 characters with 300 character overlap) while preserving structure
+2. **Document Loading**: The application loads documents from:
+   - Database (production) - fast and reliable
+   - Filesystem (development fallback) - for local testing
 
-3. **Context Retrieval**: When a user asks a question:
+3. **Text Chunking**: Documents are split into manageable chunks (1500 characters with 300 character overlap) while preserving structure
+
+4. **Context Retrieval**: When a user asks a question:
    - The query is translated to French for better matching with French documents
    - The system finds the most relevant chunks using intelligent similarity scoring
    - Both original and translated queries are used to ensure comprehensive results
 
-4. **AI Response**: The relevant context is injected into the OpenAI prompt, and GPT-4.1 nano generates a response based on the school information
+5. **AI Response**: The relevant context is injected into the OpenAI prompt, and GPT-4.1 nano generates a response based on the school information
 
-5. **Language Detection**: The system detects the user's language and responds in the same language
+6. **Language Detection**: The system detects the user's language and responds in the same language
 
-6. **PDF Links**: When relevant PDFs are found, the chatbot provides clickable download links
+7. **PDF Links**: When relevant PDFs are found, the chatbot provides clickable download links
 
 ## API Endpoints
 
@@ -148,14 +178,22 @@ Health check endpoint for deployment monitoring.
 The project includes a `render.yaml` configuration file for easy deployment on Render.
 
 1. Connect your GitHub repository to Render
-2. Set environment variables in the Render dashboard
-3. Deploy - Render will automatically build and deploy
+2. Render will automatically:
+   - Create a PostgreSQL database
+   - Set the `DATABASE_URL` environment variable
+   - Build and deploy your application
+3. After first deployment, run the migration:
+   ```bash
+   npm run migrate-db
+   ```
+   (You can do this via Render's shell or locally with `DATABASE_URL` set)
 
 ### Environment Variables for Production
 
 - `OPENAI_API_KEY` - Required
 - `OPENAI_MODEL` - Optional (defaults to gpt-4.1-nano)
-- `CRAWLER_DATA_FOLDER` - Optional (defaults to ./data/scraped)
+- `DATABASE_URL` - Automatically set by Render (PostgreSQL)
+- `CRAWLER_DATA_FOLDER` - Optional (only for development)
 - `GOOGLE_SERVICE_ACCOUNT_EMAIL` - Optional (for Google Docs)
 - `GOOGLE_PRIVATE_KEY` - Optional (for Google Docs)
 
@@ -174,13 +212,19 @@ npm start
 npm run process-pdf-ocr
 ```
 
-### Test RAG Pipeline
+### Migrate Data to Database
 
 ```bash
-npm run test-rag-pipeline
+npm run migrate-db
 ```
 
 ## Troubleshooting
+
+### Database Connection Issues
+
+- Verify `DATABASE_URL` is set correctly
+- Check that PostgreSQL is running and accessible
+- Ensure the database schema is initialized (run migration script)
 
 ### OpenAI API Errors
 
@@ -190,8 +234,8 @@ npm run test-rag-pipeline
 
 ### Document Not Loading
 
-- Check that the `data/scraped/` folder exists and contains data
-- Verify PDF files are in `data/scraped/pdfs/` and text versions in `data/scraped/pdf-texts/`
+- **Production**: Check database connection and ensure data was migrated
+- **Development**: Check that the `data/scraped/` folder exists and contains data
 - Check the browser console and server logs for error messages
 
 ### Translation Issues

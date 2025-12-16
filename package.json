@@ -14,9 +14,11 @@
     "process-pdf-ocr": "tsx scripts/process-pdf-ocr.ts",
     "test-rag-pipeline": "tsx scripts/test-rag-pipeline.ts",
     "test-translation": "tsx scripts/test-translation.ts",
-    "test-principal": "tsx scripts/test-principal-query.ts"
+    "test-principal": "tsx scripts/test-principal-query.ts",
+    "migrate-db": "tsx scripts/migrate-to-database.ts"
   },
   "dependencies": {
+    "@types/pg": "^8.16.0",
     "@vitalets/google-translate-api": "^9.2.1",
     "canvas": "^3.2.0",
     "cheerio": "^1.0.0",
@@ -27,6 +29,7 @@
     "openai": "^4.77.1",
     "pdf-parse": "^1.1.1",
     "pdfjs-dist": "^5.4.449",
+    "pg": "^8.16.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tesseract.js": "^6.0.1"
