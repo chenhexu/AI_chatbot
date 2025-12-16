@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { setCrawlerState } from '../status/route';
+import { setCrawlerState } from '@/lib/crawlerState';
 
 let crawlerProcess: { kill: () => void } | null = null;
 
