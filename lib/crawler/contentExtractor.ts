@@ -409,7 +409,7 @@ export class ContentExtractor {
     });
 
     // 6. Extract PDF URLs from text content (look for patterns like /uploads/.../file.pdf)
-    const pageText = $.text();
+    const pageText = $('body').text();
     const pdfUrlPattern = /(https?:\/\/[^\s]+\.pdf|wp-content\/uploads\/[^\s"']+\.pdf)/gi;
     const matches = pageText.match(pdfUrlPattern);
     if (matches) {
