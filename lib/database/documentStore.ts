@@ -83,8 +83,8 @@ export async function storeChunks(
  * Load all chunks from database
  */
 export async function loadAllChunks(): Promise<TextChunk[]> {
-  const result = await query<ChunkRecord>(
-    `SELECT text, source, chunk_index as "chunkIndex", pdf_url as "pdfUrl"
+  const result = await query<{ text: string; source: string; chunk_index: number; pdf_url: string | null }>(
+    `SELECT text, source, chunk_index, pdf_url
      FROM chunks
      ORDER BY document_id, chunk_index`
   );
@@ -92,8 +92,8 @@ export async function loadAllChunks(): Promise<TextChunk[]> {
   return result.rows.map(row => ({
     text: row.text,
     source: row.source,
-    index: row.chunkIndex,
-    pdfUrl: row.pdfUrl || undefined,
+    index: row.chunk_index,
+    pdfUrl: row.pdf_url || undefined,
   }));
 }
 
