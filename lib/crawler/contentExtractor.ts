@@ -274,7 +274,7 @@ export class ContentExtractor {
     });
 
     // 6. Extract URLs from text content (look for patterns)
-    const pageText = $.html() || '';
+    const pageText = $('body').html() || '';
     // Look for URLs in href attributes even if not in <a> tags
     const hrefPattern = /href=["']([^"']+)["']/gi;
     let match;
