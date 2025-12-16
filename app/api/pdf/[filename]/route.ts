@@ -8,11 +8,11 @@ import * as path from 'path';
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ filename: string }> | { filename: string } }
+  { params }: { params: Promise<{ filename: string }> }
 ) {
   try {
-    // Handle both Promise and direct params (Next.js 15+ vs older versions)
-    const resolvedParams = params instanceof Promise ? await params : params;
+    // Next.js 15+ requires params to be a Promise
+    const resolvedParams = await params;
     const filename = resolvedParams.filename;
     
     // Security: Only allow PDF files and prevent directory traversal
