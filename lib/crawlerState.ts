@@ -15,11 +15,21 @@ let crawlerState: {
   errors: 0,
 };
 
+let crawlerProcess: { kill: () => void } | null = null;
+
 export function setCrawlerState(state: Partial<typeof crawlerState>) {
   crawlerState = { ...crawlerState, ...state };
 }
 
 export function getCrawlerState() {
   return crawlerState;
+}
+
+export function setCrawlerProcess(process: { kill: () => void } | null) {
+  crawlerProcess = process;
+}
+
+export function getCrawlerProcess() {
+  return crawlerProcess;
 }
 

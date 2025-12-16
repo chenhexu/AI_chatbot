@@ -1,17 +1,12 @@
 import { NextResponse } from 'next/server';
-import { setCrawlerState } from '@/lib/crawlerState';
-
-let crawlerProcess: { kill: () => void } | null = null;
-
-export function setCrawlerProcess(process: { kill: () => void } | null) {
-  crawlerProcess = process;
-}
+import { setCrawlerState, getCrawlerProcess, setCrawlerProcess } from '@/lib/crawlerState';
 
 export async function POST() {
   try {
+    const crawlerProcess = getCrawlerProcess();
     if (crawlerProcess) {
       crawlerProcess.kill();
-      crawlerProcess = null;
+      setCrawlerProcess(null);
     }
 
     setCrawlerState({ isRunning: false });

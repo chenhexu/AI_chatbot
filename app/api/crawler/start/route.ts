@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
-import { setCrawlerState, getCrawlerState } from '@/lib/crawlerState';
-
-let crawlerProcess: { kill: () => void } | null = null;
+import { setCrawlerState, getCrawlerState, setCrawlerProcess } from '@/lib/crawlerState';
 
 export async function POST(request: Request) {
   try {
@@ -37,7 +35,7 @@ export async function POST(request: Request) {
     });
 
     crawler.unref(); // Allow Node to exit independently
-    crawlerProcess = { kill: () => crawler.kill() };
+    setCrawlerProcess({ kill: () => crawler.kill() });
 
     setCrawlerState({
       isRunning: true,
