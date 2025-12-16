@@ -36,30 +36,47 @@ export async function translateQueryToFrench(query: string, client: OpenAI): Pro
       const translate = require('@vitalets/google-translate-api');
       // The package exports translate as default or named export - try both
       const translateFn = translate.default || translate.translate || translate;
-      const result = await translateFn(query, { to: 'fr' });
+      
+      // Add timeout to prevent hanging on Render
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Translation timeout')), 5000)
+      );
+      
+      const translatePromise = translateFn(query, { to: 'fr' });
+      const result = await Promise.race([translatePromise, timeoutPromise]) as any;
+      
+      console.log(`✅ Google Translate success: "${query}" -> "${result.text}"`);
       return result.text;
     } catch (googleError) {
       // Fallback to OpenAI if Google Translate fails
-      console.warn('Google Translate failed, trying OpenAI:', googleError);
+      const errorMsg = googleError instanceof Error ? googleError.message : String(googleError);
+      console.warn('⚠️  Google Translate failed, trying OpenAI:', errorMsg);
       
-      const response = await client.chat.completions.create({
-        model: 'gpt-4o-mini', // Use a cheaper model for translation
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a translator. Translate the user\'s question to French. Only return the translation, nothing else.'
-          },
-          {
-            role: 'user',
-            content: query
-          }
-        ],
-        temperature: 0.3,
-        max_tokens: 100,
-      });
-      
-      const translation = response.choices[0]?.message?.content?.trim() || query;
-      return translation;
+      try {
+        const response = await client.chat.completions.create({
+          model: 'gpt-4o-mini', // Use a cheaper model for translation
+          messages: [
+            {
+              role: 'system',
+              content: 'You are a translator. Translate the user\'s question to French. Only return the translation, nothing else.'
+            },
+            {
+              role: 'user',
+              content: query
+            }
+          ],
+          temperature: 0.3,
+          max_tokens: 100,
+        });
+        
+        const translation = response.choices[0]?.message?.content?.trim() || query;
+        console.log(`✅ OpenAI translation success: "${query}" -> "${translation}"`);
+        return translation;
+      } catch (openaiError) {
+        console.error('❌ OpenAI translation also failed:', openaiError instanceof Error ? openaiError.message : String(openaiError));
+        // Return original query if both fail
+        return query;
+      }
     }
   } catch (error) {
     console.warn('Translation failed, using original query:', error);
@@ -78,12 +95,19 @@ export async function generateChatResponse(
   const model = process.env.OPENAI_MODEL || 'gpt-4.1-nano';
   
   // Translate query to French for better document matching
-  const translatedQuery = await translateQueryToFrench(userMessage, client);
-  console.log(`🌐 Translation: "${userMessage}" -> "${translatedQuery}"`);
+  let translatedQuery: string;
+  try {
+    translatedQuery = await translateQueryToFrench(userMessage, client);
+    console.log(`🌐 Translation: "${userMessage}" -> "${translatedQuery}"`);
+  } catch (error) {
+    console.error('❌ Translation error:', error);
+    // If translation fails, use original query
+    translatedQuery = userMessage;
+    console.log(`⚠️  Using original query (translation failed): "${userMessage}"`);
+  }
   
   // Use both original and translated query for chunk finding
   // This ensures we find relevant chunks regardless of language
-  // Retrieve more chunks to ensure we get director name patterns even if they score slightly lower
   const relevantChunksOriginal = findRelevantChunks(documentChunks, userMessage, 5);
   const relevantChunksTranslated = findRelevantChunks(documentChunks, translatedQuery, 5);
   
