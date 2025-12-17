@@ -88,16 +88,24 @@ export async function generateChatResponse(
     console.log(`⚠️  Using original query (translation failed): "${userMessage}"`);
   }
   
-  // Use both original and translated query for chunk finding
+  // Use both original and translated query for chunk finding (only if translation changed the query)
   // This ensures we find relevant chunks regardless of language
-  const relevantChunksOriginal = findRelevantChunks(documentChunks, userMessage, 5);
-  const relevantChunksTranslated = findRelevantChunks(documentChunks, translatedQuery, 5);
+  const useBothQueries = translatedQuery.toLowerCase() !== userMessage.toLowerCase();
+  let uniqueChunks: TextChunk[];
   
-  // Combine and deduplicate chunks
-  const allChunks = [...relevantChunksOriginal, ...relevantChunksTranslated];
-  const uniqueChunks = Array.from(
-    new Map(allChunks.map(chunk => [chunk.source + chunk.index, chunk])).values()
-  ).slice(0, 8); // Take top 8 unique chunks to ensure director name patterns are included
+  if (useBothQueries) {
+    const relevantChunksOriginal = findRelevantChunks(documentChunks, userMessage, 4);
+    const relevantChunksTranslated = findRelevantChunks(documentChunks, translatedQuery, 4);
+    
+    // Combine and deduplicate chunks
+    const allChunks = [...relevantChunksOriginal, ...relevantChunksTranslated];
+    uniqueChunks = Array.from(
+      new Map(allChunks.map(chunk => [chunk.source + chunk.index, chunk])).values()
+    ).slice(0, 6); // Take top 6 unique chunks (reduced from 8 for speed)
+  } else {
+    // Query is already in French, only search once
+    uniqueChunks = findRelevantChunks(documentChunks, userMessage, 6);
+  }
   const context = buildContextString(uniqueChunks);
   
   // Limit context size to avoid token limit errors
