@@ -3,6 +3,7 @@ import { loadAllDocuments } from '@/lib/documentLoader';
 import { processDocuments, type TextChunk } from '@/lib/rag';
 import { generateChatResponse } from '@/lib/openai';
 import { loadAllChunks } from '@/lib/database/documentStore';
+import { query } from '@/lib/database/client';
 
 // Cache document chunks in memory (in production, consider using Redis or similar)
 let cachedChunks: TextChunk[] | null = null;
