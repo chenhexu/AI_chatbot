@@ -1,3 +1,5 @@
+import { distance } from 'fast-levenshtein';
+
 export interface TextChunk {
   text: string;
   source: string;
@@ -320,24 +322,65 @@ function calculateSimilarityInternal(query: string, text: string): number {
         exactMatches++;
       }
     } else {
-      // Try fuzzy matching for common typos
-      if (word === 'directice') {
-        // Match "directrice" even if query has typo "directice"
-        if (/\bdirectrice\b/i.test(textLower)) {
-          exactMatches += 1.5; // Higher weight for director-related matches
-        } else if (textLower.includes('directrice') || textLower.includes('directice')) {
-          partialMatches += 0.7;
+      // Try fuzzy matching for close matches
+      let fuzzyMatchFound = false;
+      
+      // Extract words from text (similar to query words processing)
+      const textWords = textLower
+        .replace(/[^\w\s]/g, ' ')
+        .split(/\s+/)
+        .filter(w => w.length > 1 && !stopWords.has(w));
+      
+      // Calculate similarity for each text word
+      for (const textWord of textWords) {
+        // Skip if words are too different in length (more than 50% difference)
+        if (Math.abs(word.length - textWord.length) > Math.max(word.length, textWord.length) * 0.5) {
+          continue;
         }
-      } else if (word === 'project' && isProjetPersonnelQuery) {
-        // Handle typo "project" instead of "projet"
-        if (/projet\s+personnel|project\s+personnel/i.test(textLower)) {
-          exactMatches += 2.0; // High weight
+        
+        // Calculate Levenshtein distance
+        const maxLen = Math.max(word.length, textWord.length);
+        if (maxLen === 0) continue;
+        
+        const dist = distance(word, textWord);
+        const similarity = 1 - (dist / maxLen); // Similarity score 0-1
+        
+        // If similarity is high enough (>= 0.75), consider it a fuzzy match
+        if (similarity >= 0.75) {
+          fuzzyMatchFound = true;
+          // Give fuzzy matches lower weight than exact matches
+          if (isActivityWord) {
+            partialMatches += 1.5; // Medium-high weight for activity fuzzy matches
+          } else if (isCommonWord) {
+            partialMatches += 0.1; // Very low weight for common words
+          } else {
+            partialMatches += 0.5 * similarity; // Weight based on similarity
+          }
+          break; // Found a match, no need to check other words
         }
-      } else if (textLower.includes(word)) {
-        if (isCommonWord) {
-          partialMatches += 0.1; // Very low weight for common words
-        } else {
-          partialMatches += 0.3;
+      }
+      
+      // Fallback to substring matching if fuzzy matching didn't find anything
+      if (!fuzzyMatchFound) {
+        // Try fuzzy matching for common typos
+        if (word === 'directice') {
+          // Match "directrice" even if query has typo "directice"
+          if (/\bdirectrice\b/i.test(textLower)) {
+            exactMatches += 1.5; // Higher weight for director-related matches
+          } else if (textLower.includes('directrice') || textLower.includes('directice')) {
+            partialMatches += 0.7;
+          }
+        } else if (word === 'project' && isProjetPersonnelQuery) {
+          // Handle typo "project" instead of "projet"
+          if (/projet\s+personnel|project\s+personnel/i.test(textLower)) {
+            exactMatches += 2.0; // High weight
+          }
+        } else if (textLower.includes(word)) {
+          if (isCommonWord) {
+            partialMatches += 0.1; // Very low weight for common words
+          } else {
+            partialMatches += 0.3;
+          }
         }
       }
     }
@@ -362,9 +405,6 @@ function calculateSimilarityInternal(query: string, text: string): number {
     'info-parents': ['info parents', 'infos-parents', 'info-parent', 'infos parent', 'info-parents'],
     'responsable': ['responsable', 'responsables', 'coordinateur', 'coordinatrice'],
     'activité': ['activite', 'activités', 'activites', 'activity', 'activities'],
-    'robotique': ['robotics', 'robotic', 'robotique', 'club de robotique', 'club robotique'],
-    'robotics': ['robotique', 'robotic', 'robotique', 'club de robotique', 'club robotique'],
-    'robotic': ['robotique', 'robotics', 'robotique', 'club de robotique', 'club robotique'],
   };
   
   let relatedMatches = 0;
@@ -424,22 +464,11 @@ function calculateSimilarityInternal(query: string, text: string): number {
   
   // Check for activity/responsable patterns (tables with activities)
   // This handles queries about activities like "robotique", "expo science", etc.
-  // Also check for English "activity" or "activities", or if query contains any activity name
-  const hasActivityKeyword = queryLower.includes('responsable') || 
-                             queryLower.includes('activité') || 
-                             queryLower.includes('activite') ||
-                             queryLower.includes('activités') ||
-                             queryLower.includes('activites') ||
-                             queryLower.includes('activity') ||
-                             queryLower.includes('activities');
-  
-  // Check if query mentions any known activity name
-  const activityWordsInQuery = ['robotique', 'robotics', 'robotic', 'improvisation', 'theatre', 'théâtre', 
-                                 'spectacle', 'bazar', 'expo', 'science', 'math', 'dele', 'fablab', 
-                                 'journal', 'variétés', 'varietes', 'rock', 'coop', 'entraidants', 'informatiques'];
-  const hasActivityName = activityWordsInQuery.some(activity => queryLower.includes(activity));
-  
-  const isActivityQuery = hasActivityKeyword || hasActivityName;
+  const isActivityQuery = queryLower.includes('responsable') || 
+                          queryLower.includes('activité') || 
+                          queryLower.includes('activite') ||
+                          queryLower.includes('activités') ||
+                          queryLower.includes('activites');
   
   if (isActivityQuery) {
     // Common activity names to look for
