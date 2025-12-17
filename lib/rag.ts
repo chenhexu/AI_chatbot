@@ -362,6 +362,9 @@ function calculateSimilarityInternal(query: string, text: string): number {
     'info-parents': ['info parents', 'infos-parents', 'info-parent', 'infos parent', 'info-parents'],
     'responsable': ['responsable', 'responsables', 'coordinateur', 'coordinatrice'],
     'activité': ['activite', 'activités', 'activites', 'activity', 'activities'],
+    'robotique': ['robotics', 'robotic', 'robotique', 'club de robotique', 'club robotique'],
+    'robotics': ['robotique', 'robotic', 'robotique', 'club de robotique', 'club robotique'],
+    'robotic': ['robotique', 'robotics', 'robotique', 'club de robotique', 'club robotique'],
   };
   
   let relatedMatches = 0;
@@ -421,11 +424,22 @@ function calculateSimilarityInternal(query: string, text: string): number {
   
   // Check for activity/responsable patterns (tables with activities)
   // This handles queries about activities like "robotique", "expo science", etc.
-  const isActivityQuery = queryLower.includes('responsable') || 
-                          queryLower.includes('activité') || 
-                          queryLower.includes('activite') ||
-                          queryLower.includes('activités') ||
-                          queryLower.includes('activites');
+  // Also check for English "activity" or "activities", or if query contains any activity name
+  const hasActivityKeyword = queryLower.includes('responsable') || 
+                             queryLower.includes('activité') || 
+                             queryLower.includes('activite') ||
+                             queryLower.includes('activités') ||
+                             queryLower.includes('activites') ||
+                             queryLower.includes('activity') ||
+                             queryLower.includes('activities');
+  
+  // Check if query mentions any known activity name
+  const activityWordsInQuery = ['robotique', 'robotics', 'robotic', 'improvisation', 'theatre', 'théâtre', 
+                                 'spectacle', 'bazar', 'expo', 'science', 'math', 'dele', 'fablab', 
+                                 'journal', 'variétés', 'varietes', 'rock', 'coop', 'entraidants', 'informatiques'];
+  const hasActivityName = activityWordsInQuery.some(activity => queryLower.includes(activity));
+  
+  const isActivityQuery = hasActivityKeyword || hasActivityName;
   
   if (isActivityQuery) {
     // Common activity names to look for
