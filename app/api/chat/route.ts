@@ -169,19 +169,19 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Optional: Add GET endpoint to refresh document cache
+// Optional: Add GET endpoint to refresh document cache (used for preloading)
 export async function GET() {
   try {
-    const documents = await loadAllDocuments();
-    cachedChunks = processDocuments(documents);
-    chunksLastFetched = Date.now();
+    // Use the same getDocumentChunks function to ensure we load from database if available
+    const chunks = await getDocumentChunks();
     return NextResponse.json({ 
-      message: 'Documents refreshed successfully',
-      chunksCount: cachedChunks.length 
+      message: 'Documents preloaded successfully',
+      chunksCount: chunks.length 
     });
   } catch (error) {
+    console.error('GET /api/chat error:', error);
     return NextResponse.json(
-      { error: 'Failed to refresh documents' },
+      { error: 'Failed to preload documents', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }
