@@ -56,13 +56,18 @@ async function getDocumentChunks(): Promise<TextChunk[]> {
   isLoadingDocuments = true;
   try {
     // Check if DATABASE_URL is set (database mode)
-    if (process.env.DATABASE_URL) {
+    const dbUrl = process.env.DATABASE_URL;
+    console.log(`🔍 DATABASE_URL is ${dbUrl ? 'SET' : 'NOT SET'}`);
+    
+    if (dbUrl) {
       try {
         console.log('🔍 Attempting to load chunks from database...');
+        console.log('📡 Executing database query to load chunks...');
         
         // First, check if tables exist, if not initialize schema
         try {
           await query('SELECT 1 FROM chunks LIMIT 1');
+          console.log('✅ Database tables exist');
         } catch (schemaError: any) {
           // If table doesn't exist, initialize schema
           if (schemaError?.code === '42P01' || schemaError?.message?.includes('does not exist')) {
@@ -71,16 +76,19 @@ async function getDocumentChunks(): Promise<TextChunk[]> {
             await initializeDatabase();
             console.log('✅ Database schema initialized');
           } else {
+            console.error('❌ Schema check error:', schemaError);
             throw schemaError;
           }
         }
         
+        console.log('📡 Loading chunks from database...');
         const dbChunks = await loadAllChunks();
+        console.log(`📊 Query returned ${dbChunks.length} rows`);
         console.log(`📊 Database query returned ${dbChunks.length} chunks`);
         if (dbChunks.length > 0) {
           cachedChunks = dbChunks;
           chunksLastFetched = Date.now();
-          console.log(`✅ Loaded ${dbChunks.length} chunks from database`);
+          console.log(`✅ Successfully loaded ${dbChunks.length} chunks from database`);
           return cachedChunks;
         } else {
           console.log('⚠️  Database is empty (0 chunks found), falling back to filesystem...');
