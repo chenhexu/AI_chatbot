@@ -58,6 +58,22 @@ async function getDocumentChunks(): Promise<TextChunk[]> {
     if (process.env.DATABASE_URL) {
       try {
         console.log('🔍 Attempting to load chunks from database...');
+        
+        // First, check if tables exist, if not initialize schema
+        try {
+          await query('SELECT 1 FROM chunks LIMIT 1');
+        } catch (schemaError: any) {
+          // If table doesn't exist, initialize schema
+          if (schemaError?.code === '42P01' || schemaError?.message?.includes('does not exist')) {
+            console.log('📋 Database tables not found, initializing schema...');
+            const { initializeDatabase } = await import('@/lib/database/client');
+            await initializeDatabase();
+            console.log('✅ Database schema initialized');
+          } else {
+            throw schemaError;
+          }
+        }
+        
         const dbChunks = await loadAllChunks();
         console.log(`📊 Database query returned ${dbChunks.length} chunks`);
         if (dbChunks.length > 0) {
