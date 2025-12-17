@@ -57,18 +57,28 @@ async function getDocumentChunks(): Promise<TextChunk[]> {
     // Check if DATABASE_URL is set (database mode)
     if (process.env.DATABASE_URL) {
       try {
+        console.log('🔍 Attempting to load chunks from database...');
         const dbChunks = await loadAllChunks();
+        console.log(`📊 Database query returned ${dbChunks.length} chunks`);
         if (dbChunks.length > 0) {
           cachedChunks = dbChunks;
           chunksLastFetched = Date.now();
           console.log(`✅ Loaded ${dbChunks.length} chunks from database`);
           return cachedChunks;
         } else {
-          console.log('⚠️  Database is empty, falling back to filesystem...');
+          console.log('⚠️  Database is empty (0 chunks found), falling back to filesystem...');
         }
       } catch (dbError) {
-        console.warn('⚠️  Database error, falling back to filesystem:', dbError);
+        const errorDetails = dbError instanceof Error ? dbError.message : String(dbError);
+        const errorStack = dbError instanceof Error ? dbError.stack : undefined;
+        console.error('❌ Database error when loading chunks:', errorDetails);
+        if (errorStack) {
+          console.error('Stack trace:', errorStack);
+        }
+        console.warn('⚠️  Falling back to filesystem due to database error');
       }
+    } else {
+      console.log('ℹ️  DATABASE_URL not set, using filesystem...');
     }
 
     // Fallback to filesystem (development or if database is empty)

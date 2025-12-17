@@ -83,18 +83,28 @@ export async function storeChunks(
  * Load all chunks from database
  */
 export async function loadAllChunks(): Promise<TextChunk[]> {
-  const result = await query<{ text: string; source: string; chunk_index: number; pdf_url: string | null }>(
-    `SELECT text, source, chunk_index, pdf_url
-     FROM chunks
-     ORDER BY document_id, chunk_index`
-  );
+  try {
+    console.log('📡 Executing database query to load chunks...');
+    const result = await query<{ text: string; source: string; chunk_index: number; pdf_url: string | null }>(
+      `SELECT text, source, chunk_index, pdf_url
+       FROM chunks
+       ORDER BY document_id, chunk_index`
+    );
 
-  return result.rows.map(row => ({
-    text: row.text,
-    source: row.source,
-    index: row.chunk_index,
-    pdfUrl: row.pdf_url || undefined,
-  }));
+    console.log(`📊 Query returned ${result.rows.length} rows`);
+    const chunks = result.rows.map(row => ({
+      text: row.text,
+      source: row.source,
+      index: row.chunk_index,
+      pdfUrl: row.pdf_url || undefined,
+    }));
+    
+    console.log(`✅ Successfully loaded ${chunks.length} chunks from database`);
+    return chunks;
+  } catch (error) {
+    console.error('❌ Error in loadAllChunks:', error);
+    throw error;
+  }
 }
 
 /**
