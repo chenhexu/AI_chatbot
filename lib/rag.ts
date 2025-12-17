@@ -321,24 +321,49 @@ function calculateSimilarityInternal(query: string, text: string): number {
       } else {
         exactMatches++;
       }
+    } else if (word.length <= 2 || isCommonWord) {
+      // Skip fuzzy matching for very short words or common words (not worth the computation)
+      // Just do simple substring check
+      if (textLower.includes(word)) {
+        partialMatches += 0.1;
+      }
     } else {
-      // Try fuzzy matching for close matches
+      // Try fuzzy matching for close matches (OPTIMIZED: limit search to reduce computation)
+      // Only check words that start with the same letter (much faster)
+      const wordFirstLetter = word[0]?.toLowerCase();
       let fuzzyMatchFound = false;
       
       // Extract words from text (similar to query words processing)
+      // OPTIMIZATION: Only extract words that start with the same letter as the query word
       const textWords = textLower
         .replace(/[^\w\s]/g, ' ')
         .split(/\s+/)
-        .filter(w => w.length > 1 && !stopWords.has(w));
+        .filter(w => w.length > 1 && !stopWords.has(w) && w[0]?.toLowerCase() === wordFirstLetter);
+      
+      // OPTIMIZATION: Limit to first 30 matching words to avoid excessive computation
+      const limitedTextWords = textWords.slice(0, 30);
       
       // Calculate similarity for each text word
-      for (const textWord of textWords) {
+      for (const textWord of limitedTextWords) {
         // Skip if words are too different in length (more than 50% difference)
         if (Math.abs(word.length - textWord.length) > Math.max(word.length, textWord.length) * 0.5) {
           continue;
         }
         
-        // Calculate Levenshtein distance
+        // Quick substring check first (much faster than Levenshtein)
+        if (textWord.includes(word) || word.includes(textWord)) {
+          fuzzyMatchFound = true;
+          if (isActivityWord) {
+            partialMatches += 1.2;
+          } else if (isCommonWord) {
+            partialMatches += 0.1;
+          } else {
+            partialMatches += 0.4;
+          }
+          break;
+        }
+        
+        // Only calculate Levenshtein if substring match failed
         const maxLen = Math.max(word.length, textWord.length);
         if (maxLen === 0) continue;
         
