@@ -30,53 +30,32 @@ export async function translateQueryToFrench(query: string, client: OpenAI): Pro
       return query;
     }
     
-    // Try free Google Translate first (no API key needed)
+    // Skip Google Translate - it's unreliable and slow. Use OpenAI directly for faster, more reliable translation.
+    // Google Translate often times out on Render and adds unnecessary delay.
     try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const translate = require('@vitalets/google-translate-api');
-      // The package exports translate as default or named export - try both
-      const translateFn = translate.default || translate.translate || translate;
+      const response = await client.chat.completions.create({
+        model: 'gpt-4o-mini', // Use a cheaper model for translation
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a translator. Translate the user\'s question to French. Only return the translation, nothing else.'
+          },
+          {
+            role: 'user',
+            content: query
+          }
+        ],
+        temperature: 0.3,
+        max_tokens: 100,
+      });
       
-      // Add timeout to prevent hanging on Render
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Translation timeout')), 5000)
-      );
-      
-      const translatePromise = translateFn(query, { to: 'fr' });
-      const result = await Promise.race([translatePromise, timeoutPromise]) as any;
-      
-      console.log(`✅ Google Translate success: "${query}" -> "${result.text}"`);
-      return result.text;
-    } catch (googleError) {
-      // Fallback to OpenAI if Google Translate fails
-      const errorMsg = googleError instanceof Error ? googleError.message : String(googleError);
-      console.warn('⚠️  Google Translate failed, trying OpenAI:', errorMsg);
-      
-      try {
-        const response = await client.chat.completions.create({
-          model: 'gpt-4o-mini', // Use a cheaper model for translation
-          messages: [
-            {
-              role: 'system',
-              content: 'You are a translator. Translate the user\'s question to French. Only return the translation, nothing else.'
-            },
-            {
-              role: 'user',
-              content: query
-            }
-          ],
-          temperature: 0.3,
-          max_tokens: 100,
-        });
-        
-        const translation = response.choices[0]?.message?.content?.trim() || query;
-        console.log(`✅ OpenAI translation success: "${query}" -> "${translation}"`);
-        return translation;
-      } catch (openaiError) {
-        console.error('❌ OpenAI translation also failed:', openaiError instanceof Error ? openaiError.message : String(openaiError));
-        // Return original query if both fail
-        return query;
-      }
+      const translation = response.choices[0]?.message?.content?.trim() || query;
+      console.log(`✅ Translation success: "${query}" -> "${translation}"`);
+      return translation;
+    } catch (openaiError) {
+      console.error('❌ Translation failed:', openaiError instanceof Error ? openaiError.message : String(openaiError));
+      // Return original query if translation fails
+      return query;
     }
   } catch (error) {
     console.warn('Translation failed, using original query:', error);
@@ -94,7 +73,8 @@ export async function generateChatResponse(
 ): Promise<string> {
   const logPrefix = requestId ? `[${requestId}]` : '';
   const client = getOpenAIClient();
-  const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+  // Try gpt-5-nano first, fallback to gpt-4o-mini if not available
+  const model = process.env.OPENAI_MODEL || 'gpt-5-nano';
   
   // Translate query to French for better document matching
   let translatedQuery: string;
@@ -212,19 +192,42 @@ ${truncatedContext || (isEnglish ? 'No specific context available. Please inform
   const userPrompt = userMessage;
 
   try {
-    const response = await client.chat.completions.create({
-      model: model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      temperature: 0.7,
-      max_tokens: 500,
-    });
+    // If model is gpt-5-nano and it fails, fallback to gpt-4o-mini
+    let actualModel = model;
+    try {
+      const response = await client.chat.completions.create({
+        model: actualModel,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature: 0.7,
+        max_tokens: 500,
+      });
 
-    const answer = response.choices[0]?.message?.content || defaultErrorMessage;
-    
-    return answer;
+      const answer = response.choices[0]?.message?.content || defaultErrorMessage;
+      
+      return answer;
+    } catch (modelError: any) {
+      // If gpt-5-nano doesn't exist, fallback to gpt-4o-mini
+      if (actualModel === 'gpt-5-nano' && (modelError?.message?.includes('model') || modelError?.code === 'model_not_found')) {
+        console.warn('⚠️  gpt-5-nano not available, falling back to gpt-4o-mini');
+        actualModel = 'gpt-4o-mini';
+        const response = await client.chat.completions.create({
+          model: actualModel,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          temperature: 0.7,
+          max_tokens: 500,
+        });
+
+        const answer = response.choices[0]?.message?.content || defaultErrorMessage;
+        return answer;
+      }
+      throw modelError;
+    }
   } catch (error) {
     console.error('OpenAI API error:', error);
     throw new Error(

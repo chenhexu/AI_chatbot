@@ -180,11 +180,12 @@ export default function ChatInterface() {
                 onChange={handleInputChange}
                 onKeyPress={handleKeyPress}
                 placeholder="Tapez votre message..."
-                className="w-full px-4 py-3 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none overflow-y-auto"
+                className="w-full px-4 py-3 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none overflow-y-auto text-gray-900"
                 rows={1}
                 style={{
                   minHeight: '48px',
                   maxHeight: '120px',
+                  color: '#111827', // Force black text color
                 }}
                 disabled={isLoading}
               />
