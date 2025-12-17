@@ -92,7 +92,7 @@ export async function generateChatResponse(
   documentChunks: TextChunk[]
 ): Promise<string> {
   const client = getOpenAIClient();
-  const model = process.env.OPENAI_MODEL || 'gpt-4.1-nano';
+  const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
   
   // Translate query to French for better document matching
   let translatedQuery: string;
