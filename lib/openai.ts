@@ -89,8 +89,10 @@ export async function translateQueryToFrench(query: string, client: OpenAI): Pro
  */
 export async function generateChatResponse(
   userMessage: string,
-  documentChunks: TextChunk[]
+  documentChunks: TextChunk[],
+  requestId?: string
 ): Promise<string> {
+  const logPrefix = requestId ? `[${requestId}]` : '';
   const client = getOpenAIClient();
   const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
   
@@ -98,7 +100,7 @@ export async function generateChatResponse(
   let translatedQuery: string;
   try {
     translatedQuery = await translateQueryToFrench(userMessage, client);
-    console.log(`🌐 Translation: "${userMessage}" -> "${translatedQuery}"`);
+    console.log(`${logPrefix} 🌐 Translation: "${userMessage}" -> "${translatedQuery}"`);
   } catch (error) {
     console.error('❌ Translation error:', error);
     // If translation fails, use original query
@@ -127,16 +129,16 @@ export async function generateChatResponse(
     : context;
   
   // Log for debugging (remove in production if desired)
-  console.log(`Query: "${userMessage}" - Found ${uniqueChunks.length} relevant chunks out of ${documentChunks.length} total chunks`);
+  console.log(`${logPrefix} Query: "${userMessage}" - Found ${uniqueChunks.length} relevant chunks out of ${documentChunks.length} total chunks`);
   if (uniqueChunks.length > 0) {
-    console.log(`Top chunk sources: ${uniqueChunks.slice(0, 3).map(c => c.source.split('/').pop()).join(', ')}`);
+    console.log(`${logPrefix} Top chunk sources: ${uniqueChunks.slice(0, 3).map(c => c.source.split('/').pop()).join(', ')}`);
     // Log preview of top chunks to see what context is being used
     uniqueChunks.slice(0, 2).forEach((chunk, i) => {
       const preview = chunk.text.substring(0, 200).replace(/\n/g, ' ');
-      console.log(`  Chunk ${i + 1} preview: ${preview}...`);
+      console.log(`${logPrefix}   Chunk ${i + 1} preview: ${preview}...`);
     });
   } else {
-    console.warn(`⚠️  No relevant chunks found! This might cause the AI to say it doesn't have information.`);
+    console.warn(`${logPrefix} ⚠️  No relevant chunks found! This might cause the AI to say it doesn't have information.`);
   }
   
   // Extract PDF links from relevant chunks

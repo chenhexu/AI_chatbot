@@ -133,6 +133,9 @@ async function getDocumentChunks(): Promise<TextChunk[]> {
 }
 
 export async function POST(request: NextRequest) {
+  // Generate a short request ID for logging
+  const requestId = Math.random().toString(36).substring(2, 8);
+  
   try {
     const body = await request.json();
     const { message } = body;
@@ -144,12 +147,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    console.log(`[${requestId}] 📨 Received query: "${message}"`);
+
     // Get document chunks (includes scraped data from data/scraped/)
     const chunks = await getDocumentChunks();
-    console.log(`🔍 Processing query with ${chunks.length} total chunks available`);
+    console.log(`[${requestId}] 🔍 Processing query with ${chunks.length} total chunks available`);
 
     // Generate response using OpenAI with RAG
-    const response = await generateChatResponse(message, chunks);
+    const response = await generateChatResponse(message, chunks, requestId);
 
     return NextResponse.json({ response });
   } catch (error) {
