@@ -29,9 +29,17 @@ async function preloadDocumentChunks(): Promise<void> {
 async function getDocumentChunks(): Promise<TextChunk[]> {
   const now = Date.now();
   
-  // Return cached chunks if still valid
+  // Return cached chunks if still valid AND not empty (if we have DATABASE_URL, don't use empty cache)
   if (cachedChunks && (now - chunksLastFetched) < CACHE_DURATION) {
-    return cachedChunks;
+    // If we have DATABASE_URL but cache is empty, don't use cache - try database again
+    if (process.env.DATABASE_URL && cachedChunks.length === 0) {
+      console.log('⚠️  Cache is empty but DATABASE_URL is set, clearing cache and retrying database...');
+      cachedChunks = null;
+      chunksLastFetched = 0;
+    } else {
+      console.log(`✅ Using cached chunks (${cachedChunks.length} chunks, cached ${Math.round((now - chunksLastFetched) / 1000)}s ago)`);
+      return cachedChunks;
+    }
   }
   
   // If already loading, wait for it to complete
