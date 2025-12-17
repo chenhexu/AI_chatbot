@@ -1,4 +1,4 @@
-import { distance } from 'fast-levenshtein';
+import levenshtein from 'fast-levenshtein';
 
 export interface TextChunk {
   text: string;
@@ -342,7 +342,7 @@ function calculateSimilarityInternal(query: string, text: string): number {
         const maxLen = Math.max(word.length, textWord.length);
         if (maxLen === 0) continue;
         
-        const dist = distance(word, textWord);
+        const dist = levenshtein.get(word, textWord);
         const similarity = 1 - (dist / maxLen); // Similarity score 0-1
         
         // If similarity is high enough (>= 0.75), consider it a fuzzy match
