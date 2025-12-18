@@ -173,6 +173,37 @@ Health check endpoint for deployment monitoring.
 
 ## Deployment
 
+### Vercel (Recommended for Testing)
+
+Vercel provides 1 vCPU (10x more than Render's free tier) but has a 10-second timeout limit.
+
+1. **Install Vercel CLI** (optional, or use web dashboard):
+   ```bash
+   npm i -g vercel
+   ```
+
+2. **Deploy via CLI**:
+   ```bash
+   vercel
+   ```
+   Or connect your GitHub repository at [vercel.com](https://vercel.com)
+
+3. **Set Environment Variables** in Vercel dashboard:
+   - `OPENAI_API_KEY` - Your OpenAI API key
+   - `OPENAI_MODEL` - Optional (defaults to gpt-4.1-nano)
+   - `DATABASE_URL` - Your PostgreSQL connection string (can use Render's database)
+   - `NODE_ENV` - Set to `production`
+   - `GOOGLE_SERVICE_ACCOUNT_EMAIL` - Optional (for Google Docs)
+   - `GOOGLE_PRIVATE_KEY` - Optional (for Google Docs)
+
+4. **Important Notes**:
+   - ⚠️ **10-second timeout**: If your chatbot takes longer than 10 seconds, it will timeout
+   - ✅ **1 vCPU**: Much faster than Render's 0.1 CPU
+   - ✅ **Auto-scaling**: Handles traffic spikes automatically
+   - ⚠️ **Cold starts**: First request after inactivity may be slower
+
+5. **After deployment**, ensure your database is migrated (use the admin pages at `/admin/migrate`)
+
 ### Render
 
 The project includes a `render.yaml` configuration file for easy deployment on Render.
@@ -192,7 +223,7 @@ The project includes a `render.yaml` configuration file for easy deployment on R
 
 - `OPENAI_API_KEY` - Required
 - `OPENAI_MODEL` - Optional (defaults to gpt-4.1-nano)
-- `DATABASE_URL` - Automatically set by Render (PostgreSQL)
+- `DATABASE_URL` - PostgreSQL connection string (required for production)
 - `CRAWLER_DATA_FOLDER` - Optional (only for development)
 - `GOOGLE_SERVICE_ACCOUNT_EMAIL` - Optional (for Google Docs)
 - `GOOGLE_PRIVATE_KEY` - Optional (for Google Docs)
