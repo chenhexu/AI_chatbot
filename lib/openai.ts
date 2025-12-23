@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { findRelevantChunks, buildContextString, type TextChunk } from './rag';
+import { findRelevantChunks, findRelevantChunksHybrid, buildContextString, type TextChunk, type TextChunkWithEmbedding } from './rag';
 
 // Initialize OpenAI client
 let openaiClient: OpenAI | null = null;
@@ -65,11 +65,13 @@ export async function translateQueryToFrench(query: string, client: OpenAI): Pro
 
 /**
  * Generate chat response using OpenAI with RAG context
+ * Supports both regular chunks and chunks with embeddings for hybrid search
  */
 export async function generateChatResponse(
   userMessage: string,
-  documentChunks: TextChunk[],
-  requestId?: string
+  documentChunks: TextChunkWithEmbedding[],
+  requestId?: string,
+  useHybridSearch: boolean = true
 ): Promise<string> {
   const logPrefix = requestId ? `[${requestId}]` : '';
   const client = getOpenAIClient();
@@ -88,23 +90,50 @@ export async function generateChatResponse(
     console.log(`⚠️  Using original query (translation failed): "${userMessage}"`);
   }
   
+  // Check if we have chunks with embeddings for hybrid search
+  const hasEmbeddings = documentChunks.some(c => c.embedding && c.embedding.length > 0);
+  const shouldUseHybrid = useHybridSearch && hasEmbeddings;
+  
   // Use both original and translated query for chunk finding (only if translation changed the query)
   // This ensures we find relevant chunks regardless of language
   const useBothQueries = translatedQuery.toLowerCase() !== userMessage.toLowerCase();
-  let uniqueChunks: TextChunk[];
+  let uniqueChunks: TextChunkWithEmbedding[];
   
-  if (useBothQueries) {
-    const relevantChunksOriginal = findRelevantChunks(documentChunks, userMessage, 4);
-    const relevantChunksTranslated = findRelevantChunks(documentChunks, translatedQuery, 4);
+  if (shouldUseHybrid) {
+    // Use hybrid search (semantic + keyword)
+    console.log(`${logPrefix} 🧠 Using hybrid semantic+keyword search`);
     
-    // Combine and deduplicate chunks
-    const allChunks = [...relevantChunksOriginal, ...relevantChunksTranslated];
-    uniqueChunks = Array.from(
-      new Map(allChunks.map(chunk => [chunk.source + chunk.index, chunk])).values()
-    ).slice(0, 6); // Take top 6 unique chunks (reduced from 8 for speed)
+    if (useBothQueries) {
+      const [chunksOriginal, chunksTranslated] = await Promise.all([
+        findRelevantChunksHybrid(documentChunks, userMessage, 4),
+        findRelevantChunksHybrid(documentChunks, translatedQuery, 4),
+      ]);
+      
+      // Combine and deduplicate
+      const allChunks = [...chunksOriginal, ...chunksTranslated];
+      uniqueChunks = Array.from(
+        new Map(allChunks.map(chunk => [chunk.source + chunk.index, chunk])).values()
+      ).slice(0, 6);
+    } else {
+      uniqueChunks = await findRelevantChunksHybrid(documentChunks, userMessage, 6);
+    }
   } else {
-    // Query is already in French, only search once
-    uniqueChunks = findRelevantChunks(documentChunks, userMessage, 6);
+    // Fall back to keyword-only search
+    console.log(`${logPrefix} 🔤 Using keyword-only search`);
+    
+    if (useBothQueries) {
+      const relevantChunksOriginal = findRelevantChunks(documentChunks, userMessage, 4);
+      const relevantChunksTranslated = findRelevantChunks(documentChunks, translatedQuery, 4);
+      
+      // Combine and deduplicate chunks
+      const allChunks = [...relevantChunksOriginal, ...relevantChunksTranslated];
+      uniqueChunks = Array.from(
+        new Map(allChunks.map(chunk => [chunk.source + chunk.index, chunk])).values()
+      ).slice(0, 6); // Take top 6 unique chunks (reduced from 8 for speed)
+    } else {
+      // Query is already in French, only search once
+      uniqueChunks = findRelevantChunks(documentChunks, userMessage, 6);
+    }
   }
   const context = buildContextString(uniqueChunks);
   

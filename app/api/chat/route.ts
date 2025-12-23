@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { loadAllDocuments } from '@/lib/documentLoader';
-import { processDocuments, type TextChunk } from '@/lib/rag';
+import { processDocuments, type TextChunk, type TextChunkWithEmbedding } from '@/lib/rag';
 import { generateChatResponse } from '@/lib/openai';
-import { loadAllChunks } from '@/lib/database/documentStore';
+import { loadAllChunks, loadAllChunksWithEmbeddings } from '@/lib/database/documentStore';
 import { query } from '@/lib/database/client';
 
 // Cache document chunks in memory (in production, consider using Redis or similar)
-let cachedChunks: TextChunk[] | null = null;
+let cachedChunks: TextChunkWithEmbedding[] | null = null;
 let chunksLastFetched: number = 0;
 const CACHE_DURATION = 60 * 60 * 1000; // 1 hour in milliseconds
 let isLoadingDocuments = false; // Prevent concurrent loading
@@ -25,8 +25,9 @@ async function preloadDocumentChunks(): Promise<void> {
 
 /**
  * Get document chunks, using cache if available
+ * Loads chunks with embeddings for hybrid semantic search
  */
-async function getDocumentChunks(): Promise<TextChunk[]> {
+async function getDocumentChunks(): Promise<TextChunkWithEmbedding[]> {
   const now = Date.now();
   
   // Return cached chunks if still valid AND not empty (if we have DATABASE_URL, don't use empty cache)
@@ -37,7 +38,8 @@ async function getDocumentChunks(): Promise<TextChunk[]> {
       cachedChunks = null;
       chunksLastFetched = 0;
     } else {
-      console.log(`✅ Using cached chunks (${cachedChunks.length} chunks, cached ${Math.round((now - chunksLastFetched) / 1000)}s ago)`);
+      const withEmbeddings = cachedChunks.filter(c => c.embedding).length;
+      console.log(`✅ Using cached chunks (${cachedChunks.length} chunks, ${withEmbeddings} with embeddings, cached ${Math.round((now - chunksLastFetched) / 1000)}s ago)`);
       return cachedChunks;
     }
   }
@@ -89,14 +91,21 @@ async function getDocumentChunks(): Promise<TextChunk[]> {
           }
         }
         
-        console.log('📡 Loading chunks from database...');
-        const dbChunks = await loadAllChunks();
+        // Load chunks WITH embeddings for hybrid semantic search
+        console.log('📡 Loading chunks with embeddings from database...');
+        const dbChunks = await loadAllChunksWithEmbeddings();
         console.log(`📊 Query returned ${dbChunks.length} rows`);
-        console.log(`📊 Database query returned ${dbChunks.length} chunks`);
+        const withEmbeddings = dbChunks.filter(c => c.embedding).length;
+        console.log(`📊 Database query returned ${dbChunks.length} chunks (${withEmbeddings} with embeddings)`);
         if (dbChunks.length > 0) {
           cachedChunks = dbChunks;
           chunksLastFetched = Date.now();
           console.log(`✅ Successfully loaded ${dbChunks.length} chunks from database`);
+          if (withEmbeddings > 0) {
+            console.log(`🧠 Hybrid semantic search enabled (${withEmbeddings}/${dbChunks.length} embeddings)`);
+          } else {
+            console.log('⚠️  No embeddings found - using keyword-only search. Generate embeddings for better accuracy.');
+          }
           return cachedChunks;
         } else {
           console.log('⚠️  Database is empty (0 chunks found), falling back to filesystem...');
@@ -119,6 +128,7 @@ async function getDocumentChunks(): Promise<TextChunk[]> {
     cachedChunks = processDocuments(documents);
     chunksLastFetched = Date.now();
     console.log(`✅ Loaded ${documents.length} documents from filesystem, created ${cachedChunks.length} chunks for RAG`);
+    console.log('⚠️  Filesystem mode - no embeddings, using keyword-only search');
     return cachedChunks;
   } catch (error) {
     console.error('Error fetching documents:', error);

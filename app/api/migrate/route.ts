@@ -2,7 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { initializeDatabase, closeDatabase } from '@/lib/database/client';
 import { loadAllDocuments } from '@/lib/documentLoader';
 import { processDocuments } from '@/lib/rag';
-import { storeDocument, storeChunks, clearAllData, getDocumentCount, getChunkCount } from '@/lib/database/documentStore';
+import { 
+  storeDocument, 
+  storeChunks, 
+  clearAllData, 
+  getDocumentCount, 
+  getChunkCount,
+  ensureEmbeddingColumn,
+  getEmbeddingStats,
+  getChunksWithoutEmbeddings,
+  updateChunkEmbeddingsBatch
+} from '@/lib/database/documentStore';
+import { generateEmbeddingsBatch } from '@/lib/embeddings';
 
 /**
  * API endpoint to migrate data from filesystem to database
@@ -10,6 +21,7 @@ import { storeDocument, storeChunks, clearAllData, getDocumentCount, getChunkCou
  * 
  * GET /api/migrate - Check migration status
  * POST /api/migrate - Run migration
+ * POST /api/migrate?action=embeddings - Generate embeddings for chunks
  */
 export async function GET() {
   try {
@@ -22,13 +34,23 @@ export async function GET() {
 
     const docCount = await getDocumentCount();
     const chunkCount = await getChunkCount();
+    
+    // Get embedding stats
+    let embeddingStats = { total: 0, withEmbedding: 0, withoutEmbedding: 0 };
+    try {
+      embeddingStats = await getEmbeddingStats();
+    } catch (e) {
+      // Embedding column might not exist yet
+      console.log('Embedding stats not available (column may not exist yet)');
+    }
 
     return NextResponse.json({
       status: 'ready',
       documents: docCount,
       chunks: chunkCount,
+      embeddings: embeddingStats,
       message: docCount > 0 
-        ? `Database has ${docCount} documents and ${chunkCount} chunks`
+        ? `Database has ${docCount} documents and ${chunkCount} chunks (${embeddingStats.withEmbedding} with embeddings)`
         : 'Database is empty. Run migration to populate it.'
     });
   } catch (error) {
@@ -53,7 +75,13 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json().catch(() => ({}));
+    const action = body.action as string | undefined;
     const force = body.force === true; // Allow forcing re-migration
+
+    // Handle embedding generation action
+    if (action === 'embeddings') {
+      return await handleEmbeddingGeneration(body.batchSize || 50);
+    }
 
     console.log('🚀 Starting migration to database...');
 
@@ -155,6 +183,78 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { 
         error: 'Migration failed',
+        details: error instanceof Error ? error.message : String(error),
+        status: 'error'
+      },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * Handle embedding generation for chunks
+ */
+async function handleEmbeddingGeneration(batchSize: number = 50) {
+  try {
+    console.log('🧠 Starting embedding generation...');
+    
+    // Ensure embedding column exists
+    await ensureEmbeddingColumn();
+    
+    // Get chunks without embeddings
+    const chunksToProcess = await getChunksWithoutEmbeddings();
+    
+    if (chunksToProcess.length === 0) {
+      const stats = await getEmbeddingStats();
+      return NextResponse.json({
+        status: 'complete',
+        processed: 0,
+        remaining: 0,
+        total: stats.total,
+        message: 'All chunks already have embeddings'
+      });
+    }
+    
+    console.log(`📊 Found ${chunksToProcess.length} chunks without embeddings`);
+    
+    // Process in batches
+    const batch = chunksToProcess.slice(0, batchSize);
+    const texts = batch.map(c => c.text);
+    
+    console.log(`🔄 Generating embeddings for ${batch.length} chunks...`);
+    const embeddings = await generateEmbeddingsBatch(texts);
+    
+    // Update database with embeddings
+    const updates = batch.map((chunk, i) => ({
+      id: chunk.id,
+      embedding: embeddings[i],
+    }));
+    
+    console.log(`💾 Saving embeddings to database...`);
+    await updateChunkEmbeddingsBatch(updates);
+    
+    const stats = await getEmbeddingStats();
+    const remaining = chunksToProcess.length - batch.length;
+    
+    console.log(`✅ Generated ${batch.length} embeddings. ${remaining} remaining.`);
+    
+    return NextResponse.json({
+      status: remaining > 0 ? 'in_progress' : 'complete',
+      processed: batch.length,
+      remaining,
+      total: stats.total,
+      withEmbedding: stats.withEmbedding,
+      message: remaining > 0 
+        ? `Generated ${batch.length} embeddings. ${remaining} remaining. Call again to continue.`
+        : `All ${stats.total} chunks now have embeddings.`
+    });
+    
+  } catch (error) {
+    console.error('❌ Embedding generation failed:', error);
+    
+    return NextResponse.json(
+      {
+        error: 'Embedding generation failed',
         details: error instanceof Error ? error.message : String(error),
         status: 'error'
       },

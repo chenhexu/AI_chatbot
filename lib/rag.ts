@@ -1,10 +1,17 @@
 import levenshtein from 'fast-levenshtein';
+import { cosineSimilarity, normalizeScore, getQueryEmbedding } from './embeddings';
 
 export interface TextChunk {
   text: string;
   source: string;
   index: number;
   pdfUrl?: string; // Original PDF URL/path for PDF text files
+}
+
+// Extended chunk with embedding for semantic search
+export interface TextChunkWithEmbedding extends TextChunk {
+  id?: number;
+  embedding?: number[];
 }
 
 /**
@@ -745,7 +752,7 @@ function calculateSimilarityInternal(query: string, text: string): number {
 }
 
 /**
- * Find most relevant chunks for a query
+ * Find most relevant chunks for a query (keyword-based only)
  */
 export function findRelevantChunks(
   chunks: TextChunk[],
@@ -776,6 +783,107 @@ export function findRelevantChunks(
   return scoredChunks
     .slice(0, Math.min(3, chunks.length))
     .map(item => item.chunk);
+}
+
+// Weights for hybrid scoring
+const SEMANTIC_WEIGHT = 0.6;
+const KEYWORD_WEIGHT = 0.4;
+
+/**
+ * Calculate hybrid score combining semantic and keyword similarity
+ */
+function calculateHybridScore(
+  keywordScore: number,
+  semanticScore: number
+): number {
+  // Semantic score is normalized from cosine similarity [-1, 1] to [0, 1]
+  const normalizedSemantic = normalizeScore(semanticScore);
+  
+  // Combine scores with weights
+  return (normalizedSemantic * SEMANTIC_WEIGHT) + (keywordScore * KEYWORD_WEIGHT);
+}
+
+/**
+ * Find most relevant chunks using hybrid semantic + keyword search
+ * Uses embeddings for semantic similarity and falls back to keyword-only if embeddings unavailable
+ */
+export async function findRelevantChunksHybrid(
+  chunks: TextChunkWithEmbedding[],
+  query: string,
+  maxChunks: number = 6
+): Promise<TextChunkWithEmbedding[]> {
+  // Check if any chunks have embeddings
+  const chunksWithEmbeddings = chunks.filter(c => c.embedding && c.embedding.length > 0);
+  const hasEmbeddings = chunksWithEmbeddings.length > 0;
+  
+  console.log(`🔍 Hybrid search: ${chunksWithEmbeddings.length}/${chunks.length} chunks have embeddings`);
+  
+  // If no embeddings available, fall back to keyword-only search
+  if (!hasEmbeddings) {
+    console.log('⚠️  No embeddings found, using keyword-only search');
+    return findRelevantChunks(chunks, query, maxChunks);
+  }
+  
+  try {
+    // Generate query embedding
+    console.log('🔄 Generating query embedding...');
+    const queryEmbedding = await getQueryEmbedding(query);
+    console.log('✅ Query embedding generated');
+    
+    // Calculate hybrid scores for chunks with embeddings
+    const scoredChunks = chunks.map(chunk => {
+      // Keyword score (always available)
+      const keywordScore = calculateSimilarity(query, chunk.text, chunk.source);
+      
+      // Semantic score (only if embedding available)
+      let semanticScore = 0;
+      if (chunk.embedding && chunk.embedding.length > 0) {
+        semanticScore = cosineSimilarity(queryEmbedding, chunk.embedding);
+      }
+      
+      // Calculate hybrid score
+      const hasEmbedding = chunk.embedding && chunk.embedding.length > 0;
+      const hybridScore = hasEmbedding 
+        ? calculateHybridScore(keywordScore, semanticScore)
+        : keywordScore * 0.8; // Slightly penalize chunks without embeddings
+      
+      return {
+        chunk,
+        keywordScore,
+        semanticScore,
+        hybridScore,
+        hasEmbedding,
+      };
+    });
+    
+    // Sort by hybrid score (descending)
+    scoredChunks.sort((a, b) => b.hybridScore - a.hybridScore);
+    
+    // Log top results for debugging
+    console.log('📊 Top 5 hybrid search results:');
+    scoredChunks.slice(0, 5).forEach((item, i) => {
+      const preview = item.chunk.text.substring(0, 80).replace(/\n/g, ' ');
+      console.log(`  ${i + 1}. [H:${item.hybridScore.toFixed(3)} K:${item.keywordScore.toFixed(3)} S:${item.semanticScore.toFixed(3)}] ${preview}...`);
+    });
+    
+    // Return top chunks
+    const relevantChunks = scoredChunks
+      .slice(0, maxChunks)
+      .filter(item => item.hybridScore > 0.1 || scoredChunks.length <= maxChunks);
+    
+    if (relevantChunks.length > 0) {
+      return relevantChunks.map(item => item.chunk);
+    }
+    
+    // Fallback: return top chunks even with low scores
+    return scoredChunks
+      .slice(0, Math.min(3, chunks.length))
+      .map(item => item.chunk);
+      
+  } catch (error) {
+    console.error('❌ Error in hybrid search, falling back to keyword-only:', error);
+    return findRelevantChunks(chunks, query, maxChunks);
+  }
 }
 
 /**

@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS chunks (
   chunk_index INTEGER NOT NULL, -- Index of chunk within document
   source VARCHAR(500) NOT NULL, -- Source identifier for compatibility
   pdf_url VARCHAR(1000), -- PDF URL if applicable
+  embedding JSONB, -- Embedding vector for semantic search (array of floats)
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(document_id, chunk_index)
 );
@@ -35,3 +36,5 @@ CREATE INDEX IF NOT EXISTS idx_documents_source_id ON documents(source_id);
 CREATE INDEX IF NOT EXISTS idx_chunks_text_search ON chunks USING gin(to_tsvector('french', text));
 CREATE INDEX IF NOT EXISTS idx_documents_content_search ON documents USING gin(to_tsvector('french', content));
 
+-- Index for embedding column (for chunks that have embeddings)
+CREATE INDEX IF NOT EXISTS idx_chunks_has_embedding ON chunks((embedding IS NOT NULL));
