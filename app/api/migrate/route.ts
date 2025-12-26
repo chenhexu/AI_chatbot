@@ -82,8 +82,9 @@ export async function POST(request: NextRequest) {
     const action = body.action as string | undefined;
 
     // Handle embedding generation action
+    // Use small batch size (10) to avoid Vercel 10s timeout
     if (action === 'embeddings') {
-      return await handleEmbeddingGeneration(body.batchSize || 50);
+      return await handleEmbeddingGeneration(body.batchSize || 10);
     }
 
     // Handle clear action

@@ -151,7 +151,7 @@ export default function MigratePage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ action: 'embeddings', batchSize: 50 }),
+        body: JSON.stringify({ action: 'embeddings', batchSize: 10 }),
       });
 
       const data = await response.json();
