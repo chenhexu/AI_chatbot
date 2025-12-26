@@ -30,11 +30,15 @@ export async function GET() {
     const docCount = await getDocumentCount();
     const chunkCount = await getChunkCount();
     
+    // Ensure embedding column exists before getting stats
     let embeddingStats = { total: 0, withEmbedding: 0, withoutEmbedding: 0 };
     try {
+      await ensureEmbeddingColumn();
       embeddingStats = await getEmbeddingStats();
     } catch (e) {
-      console.log('Embedding stats not available yet');
+      console.log('Embedding stats not available yet:', e);
+      // If stats fail, at least show total chunks
+      embeddingStats = { total: chunkCount, withEmbedding: 0, withoutEmbedding: chunkCount };
     }
 
     return NextResponse.json({

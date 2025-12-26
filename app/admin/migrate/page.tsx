@@ -177,8 +177,8 @@ export default function MigratePage() {
     checkStatus();
   }, []);
 
-  const embeddingPercentage = embeddingStats 
-    ? Math.round((embeddingStats.withEmbedding / Math.max(embeddingStats.total, 1)) * 100)
+  const embeddingPercentage = embeddingStats && embeddingStats.total > 0
+    ? Math.round((embeddingStats.withEmbedding / embeddingStats.total) * 100)
     : 0;
 
   return (
@@ -269,10 +269,12 @@ export default function MigratePage() {
               </p>
               
               {/* Embedding Stats */}
-              {embeddingStats && (
+              {(embeddingStats || stats) && (
                 <div className="mb-3">
                   <div className="flex justify-between text-sm text-teal-700 mb-1">
-                    <span>Progress: {embeddingStats.withEmbedding} / {embeddingStats.total} chunks</span>
+                    <span>
+                      Progress: {embeddingStats?.withEmbedding || 0} / {embeddingStats?.total || stats?.chunks || 0} chunks
+                    </span>
                     <span>{embeddingPercentage}%</span>
                   </div>
                   <div className="w-full bg-teal-200 rounded-full h-2">
@@ -298,14 +300,16 @@ export default function MigratePage() {
               {/* Generate Button */}
               <button
                 onClick={generateEmbeddings}
-                disabled={embeddingStatus === 'generating' || (embeddingStats?.withoutEmbedding === 0)}
+                disabled={embeddingStatus === 'generating' || (embeddingStats && embeddingStats.withoutEmbedding === 0 && embeddingStats.total > 0)}
                 className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {embeddingStatus === 'generating' 
-                  ? 'Generating...' 
-                  : embeddingStats?.withoutEmbedding === 0 
+                  ? `Generating... (${embeddingProgress?.processed || 0} processed, ${embeddingProgress?.remaining || 0} remaining)` 
+                  : embeddingStats && embeddingStats.withoutEmbedding === 0 && embeddingStats.total > 0
                     ? 'All Embeddings Generated ✓' 
-                    : 'Generate Embeddings'}
+                    : stats && stats.chunks > 0
+                      ? 'Generate Embeddings'
+                      : 'No chunks to embed'}
               </button>
               
               {embeddingStats?.withoutEmbedding === 0 && embeddingStats.total > 0 && (
