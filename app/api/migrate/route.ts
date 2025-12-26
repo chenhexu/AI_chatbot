@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { initializeDatabase, closeDatabase } from '@/lib/database/client';
-import { loadAllDocuments } from '@/lib/documentLoader';
-import { processDocuments } from '@/lib/rag';
 import { 
   storeDocument, 
   storeChunks, 
@@ -14,6 +12,15 @@ import {
   updateChunkEmbeddingsBatch
 } from '@/lib/database/documentStore';
 import { generateEmbeddingsBatch } from '@/lib/embeddings';
+
+// Dynamic imports for heavy modules to reduce serverless bundle size
+async function loadAndProcessDocuments() {
+  const { loadAllDocuments } = await import('@/lib/documentLoader');
+  const { processDocuments } = await import('@/lib/rag');
+  const documents = await loadAllDocuments();
+  const chunks = processDocuments(documents);
+  return { documents, chunks };
+}
 
 /**
  * API endpoint to migrate data from filesystem to database
@@ -106,10 +113,10 @@ export async function POST(request: NextRequest) {
       await clearAllData();
     }
 
-    // Load documents from filesystem
+    // Load documents from filesystem (dynamic import to reduce bundle size)
     console.log('📂 Loading documents from filesystem...');
-    const documents = await loadAllDocuments();
-    console.log(`✅ Loaded ${documents.length} documents from filesystem`);
+    const { documents, chunks } = await loadAndProcessDocuments();
+    console.log(`✅ Loaded ${documents.length} documents, created ${chunks.length} chunks`);
 
     if (documents.length === 0) {
       return NextResponse.json({
@@ -117,11 +124,6 @@ export async function POST(request: NextRequest) {
         message: 'No documents found in filesystem. Make sure data/scraped/ folder has data.'
       });
     }
-
-    // Process documents into chunks
-    console.log('🔪 Processing documents into chunks...');
-    const chunks = processDocuments(documents);
-    console.log(`✅ Created ${chunks.length} chunks`);
 
     // Store documents and chunks in database
     console.log('💾 Storing in database...');

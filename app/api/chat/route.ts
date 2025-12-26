@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { loadAllDocuments } from '@/lib/documentLoader';
-import { processDocuments, type TextChunk, type TextChunkWithEmbedding } from '@/lib/rag';
+import { type TextChunkWithEmbedding } from '@/lib/rag';
 import { generateChatResponse } from '@/lib/openai';
-import { loadAllChunks, loadAllChunksWithEmbeddings } from '@/lib/database/documentStore';
+import { loadAllChunksWithEmbeddings } from '@/lib/database/documentStore';
 import { query } from '@/lib/database/client';
+
+// Dynamic imports for heavy modules (only used in filesystem fallback mode)
+// This prevents bundling heavy OCR dependencies in production serverless functions
+async function loadFromFilesystem(): Promise<TextChunkWithEmbedding[]> {
+  const { loadAllDocuments } = await import('@/lib/documentLoader');
+  const { processDocuments } = await import('@/lib/rag');
+  const documents = await loadAllDocuments();
+  return processDocuments(documents);
+}
 
 // Cache document chunks in memory (in production, consider using Redis or similar)
 let cachedChunks: TextChunkWithEmbedding[] | null = null;
@@ -124,10 +132,11 @@ async function getDocumentChunks(): Promise<TextChunkWithEmbedding[]> {
     }
 
     // Fallback to filesystem (development or if database is empty)
-    const documents = await loadAllDocuments();
-    cachedChunks = processDocuments(documents);
+    // Uses dynamic import to avoid bundling heavy OCR dependencies in production
+    console.log('📂 Loading from filesystem (dynamic import)...');
+    cachedChunks = await loadFromFilesystem();
     chunksLastFetched = Date.now();
-    console.log(`✅ Loaded ${documents.length} documents from filesystem, created ${cachedChunks.length} chunks for RAG`);
+    console.log(`✅ Loaded ${cachedChunks.length} chunks from filesystem`);
     console.log('⚠️  Filesystem mode - no embeddings, using keyword-only search');
     return cachedChunks;
   } catch (error) {
