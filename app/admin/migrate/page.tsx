@@ -26,14 +26,32 @@ export default function MigratePage() {
     try {
       const response = await fetch('/api/migrate');
       const data = await response.json();
+      console.log('Status response:', data); // Debug log
       
       if (data.status === 'ready') {
         setStats({ documents: data.documents, chunks: data.chunks });
         setMessage(data.message);
         
-        // Update embedding stats if available
+        // Update embedding stats - if stats are zeros but we have chunks, fix it
         if (data.embeddings) {
-          setEmbeddingStats(data.embeddings);
+          const embStats = data.embeddings;
+          // If total is 0 but we have chunks, use chunk count
+          if (embStats.total === 0 && data.chunks > 0) {
+            setEmbeddingStats({
+              total: data.chunks,
+              withEmbedding: 0,
+              withoutEmbedding: data.chunks,
+            });
+          } else {
+            setEmbeddingStats(embStats);
+          }
+        } else if (data.chunks > 0) {
+          // No embedding stats but we have chunks - assume none have embeddings
+          setEmbeddingStats({
+            total: data.chunks,
+            withEmbedding: 0,
+            withoutEmbedding: data.chunks,
+          });
         }
       } else {
         setMessage(data.message || data.error || 'Unknown status');
@@ -300,7 +318,11 @@ export default function MigratePage() {
               {/* Generate Button */}
               <button
                 onClick={generateEmbeddings}
-                disabled={embeddingStatus === 'generating' || (embeddingStats && embeddingStats.withoutEmbedding === 0 && embeddingStats.total > 0)}
+                disabled={
+                  embeddingStatus === 'generating' || 
+                  (embeddingStats && embeddingStats.withoutEmbedding === 0 && embeddingStats.total > 0) ||
+                  !stats || stats.chunks === 0
+                }
                 className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {embeddingStatus === 'generating' 
@@ -308,7 +330,7 @@ export default function MigratePage() {
                   : embeddingStats && embeddingStats.withoutEmbedding === 0 && embeddingStats.total > 0
                     ? 'All Embeddings Generated ✓' 
                     : stats && stats.chunks > 0
-                      ? 'Generate Embeddings'
+                      ? `Generate Embeddings (${embeddingStats?.withoutEmbedding || stats.chunks} remaining)`
                       : 'No chunks to embed'}
               </button>
               

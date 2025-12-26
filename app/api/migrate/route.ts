@@ -31,13 +31,20 @@ export async function GET() {
     const chunkCount = await getChunkCount();
     
     // Ensure embedding column exists before getting stats
-    let embeddingStats = { total: 0, withEmbedding: 0, withoutEmbedding: 0 };
+    let embeddingStats = { total: chunkCount, withEmbedding: 0, withoutEmbedding: chunkCount };
     try {
       await ensureEmbeddingColumn();
-      embeddingStats = await getEmbeddingStats();
+      const stats = await getEmbeddingStats();
+      // Only use stats if they're valid (total > 0 or matches chunkCount)
+      if (stats.total > 0 || stats.total === chunkCount) {
+        embeddingStats = stats;
+      } else {
+        console.log(`Stats mismatch: stats.total=${stats.total}, chunkCount=${chunkCount}, using chunkCount`);
+        embeddingStats = { total: chunkCount, withEmbedding: stats.withEmbedding, withoutEmbedding: chunkCount - stats.withEmbedding };
+      }
     } catch (e) {
-      console.log('Embedding stats not available yet:', e);
-      // If stats fail, at least show total chunks
+      console.error('Error getting embedding stats:', e);
+      // If stats fail, use chunk count as total
       embeddingStats = { total: chunkCount, withEmbedding: 0, withoutEmbedding: chunkCount };
     }
 
