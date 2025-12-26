@@ -1,10 +1,11 @@
 # Collège Saint-Louis AI Chatbot
 
-An AI-powered chatbot for Collège Saint-Louis that answers questions about the school using information from scraped website data, PDFs, and Google Docs. Built with Next.js, TypeScript, OpenAI GPT-4.1 nano, and PostgreSQL.
+An AI-powered chatbot for Collège Saint-Louis that answers questions about the school using information from scraped website data, PDFs, and Google Docs. Built with Next.js, TypeScript, OpenAI GPT-4o-mini, and PostgreSQL. Uses **FREE Gemini embeddings** for semantic search.
 
 ## Features
 
-- 🤖 AI-powered Q&A using OpenAI GPT-4.1 nano
+- 🤖 AI-powered Q&A using OpenAI GPT-4o-mini
+- 🧠 **Semantic search** using FREE Gemini embeddings (understands meaning, not just keywords)
 - 📚 RAG (Retrieval Augmented Generation) with school information from multiple sources:
   - Scraped website pages
   - PDF documents (with OCR support)
@@ -39,7 +40,10 @@ Create a `.env.local` file in the root directory:
 ```env
 # AI Configuration
 OPENAI_API_KEY=your_openai_api_key_here
-OPENAI_MODEL=gpt-4.1-nano
+OPENAI_MODEL=gpt-4o-mini
+
+# Gemini API (FREE embeddings - get key from https://aistudio.google.com/)
+GEMINI_API_KEY=your_gemini_api_key_here
 
 # Database (for production - Render will set this automatically)
 DATABASE_URL=postgresql://user:password@host:port/database

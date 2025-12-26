@@ -1,39 +1,36 @@
-import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// Embedding model configuration
-const EMBEDDING_MODEL = 'text-embedding-3-small';
-const EMBEDDING_DIMENSIONS = 1536;
-const BATCH_SIZE = 100; // OpenAI allows up to 2048 inputs per batch
+// Embedding model configuration - Using Gemini (FREE!)
+const EMBEDDING_MODEL = 'text-embedding-004';
+const EMBEDDING_DIMENSIONS = 768; // Gemini's text-embedding-004 outputs 768 dimensions
+const BATCH_SIZE = 100;
 
-// Initialize OpenAI client
-let openaiClient: OpenAI | null = null;
+// Initialize Gemini client
+let geminiClient: GoogleGenerativeAI | null = null;
 
-function getOpenAIClient(): OpenAI {
-  if (!openaiClient) {
-    const apiKey = process.env.OPENAI_API_KEY;
+function getGeminiClient(): GoogleGenerativeAI {
+  if (!geminiClient) {
+    const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      throw new Error('OPENAI_API_KEY environment variable is not set');
+      throw new Error('GEMINI_API_KEY environment variable is not set');
     }
-    openaiClient = new OpenAI({ apiKey });
+    geminiClient = new GoogleGenerativeAI(apiKey);
   }
-  return openaiClient;
+  return geminiClient;
 }
 
 /**
- * Generate embedding for a single text
+ * Generate embedding for a single text using Gemini (FREE!)
  */
 export async function generateEmbedding(text: string): Promise<number[]> {
-  const client = getOpenAIClient();
+  const client = getGeminiClient();
+  const model = client.getGenerativeModel({ model: EMBEDDING_MODEL });
   
-  // Truncate text if too long (max ~8000 tokens for text-embedding-3-small)
-  const truncatedText = text.slice(0, 30000); // ~8000 tokens roughly
+  // Truncate text if too long
+  const truncatedText = text.slice(0, 25000);
   
-  const response = await client.embeddings.create({
-    model: EMBEDDING_MODEL,
-    input: truncatedText,
-  });
-  
-  return response.data[0].embedding;
+  const result = await model.embedContent(truncatedText);
+  return result.embedding.values;
 }
 
 /**
@@ -41,27 +38,24 @@ export async function generateEmbedding(text: string): Promise<number[]> {
  * More efficient than generating one at a time
  */
 export async function generateEmbeddingsBatch(texts: string[]): Promise<number[][]> {
-  const client = getOpenAIClient();
+  const client = getGeminiClient();
+  const model = client.getGenerativeModel({ model: EMBEDDING_MODEL });
   const results: number[][] = [];
   
   // Process in batches
   for (let i = 0; i < texts.length; i += BATCH_SIZE) {
     const batch = texts.slice(i, i + BATCH_SIZE);
     
-    // Truncate texts
-    const truncatedBatch = batch.map(text => text.slice(0, 30000));
-    
-    const response = await client.embeddings.create({
-      model: EMBEDDING_MODEL,
-      input: truncatedBatch,
+    // Generate embeddings for each text in the batch
+    // Gemini doesn't have a native batch API, so we parallelize
+    const batchPromises = batch.map(async (text) => {
+      const truncatedText = text.slice(0, 25000);
+      const result = await model.embedContent(truncatedText);
+      return result.embedding.values;
     });
     
-    // Extract embeddings in order
-    const embeddings = response.data
-      .sort((a, b) => a.index - b.index)
-      .map(item => item.embedding);
-    
-    results.push(...embeddings);
+    const batchResults = await Promise.all(batchPromises);
+    results.push(...batchResults);
   }
   
   return results;
@@ -157,4 +151,3 @@ export async function getQueryEmbedding(query: string): Promise<number[]> {
 }
 
 export { EMBEDDING_MODEL, EMBEDDING_DIMENSIONS };
-
