@@ -825,10 +825,23 @@ export async function findRelevantChunksHybrid(
   }
   
   try {
-    // Generate query embedding
+    // Generate query embedding with timeout (3 seconds max)
     console.log('🔄 Generating query embedding...');
-    const queryEmbedding = await getQueryEmbedding(query);
-    console.log('✅ Query embedding generated');
+    const timeoutPromise = new Promise<null>((_, reject) => 
+      setTimeout(() => reject(new Error('Query embedding timeout')), 3000)
+    );
+    
+    let queryEmbedding: number[];
+    try {
+      queryEmbedding = await Promise.race([
+        getQueryEmbedding(query),
+        timeoutPromise
+      ]) as number[];
+      console.log('✅ Query embedding generated');
+    } catch (embError) {
+      console.warn('⚠️  Query embedding failed/timeout, using keyword-only:', embError);
+      return findRelevantChunks(chunks, query, maxChunks);
+    }
     
     // Calculate hybrid scores for chunks with embeddings
     const scoredChunks = chunks.map(chunk => {
