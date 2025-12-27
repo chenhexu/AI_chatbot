@@ -1,40 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  
-  // Exclude heavy native Node.js modules from server-side bundling
-  serverExternalPackages: ['canvas', 'pdfjs-dist', 'tesseract.js', 'pdf-parse', 'sharp'],
-  
-  // Exclude heavy dependencies from serverless function output
-  // This is critical for Vercel's 250MB limit
-  outputFileTracingExcludes: {
-    '/api/chat': [
-      './node_modules/canvas/**',
-      './node_modules/pdfjs-dist/**',
-      './node_modules/tesseract.js/**',
-      './node_modules/pdf-parse/**',
-      './node_modules/sharp/**',
-      './lib/documentLoader.ts',
-      './lib/documentProcessors/**',
-      './data/**',
-    ],
-    '/api/migrate': [
-      './node_modules/canvas/**',
-      './node_modules/pdfjs-dist/**',
-      './node_modules/tesseract.js/**',
-      './node_modules/sharp/**',
-      './data/**',
-    ],
-    '/api/health': [
-      './node_modules/canvas/**',
-      './node_modules/pdfjs-dist/**',
-      './node_modules/tesseract.js/**',
-      './node_modules/pdf-parse/**',
-      './node_modules/sharp/**',
-    ],
-  },
-  
-  webpack: (config, { isServer }) => {
+  // Exclude native Node.js modules from server-side bundling
+  serverExternalPackages: ['canvas', 'pdfjs-dist', 'tesseract.js', 'pdf-parse'],
+  webpack: (config, { isServer, webpack }) => {
+    // Node.js-only libraries (pdfjs-dist, canvas, tesseract.js) only used in API routes
     if (!isServer) {
       // On client, make sure these Node.js modules aren't bundled
       config.resolve.fallback = {
@@ -47,16 +17,18 @@ const nextConfig = {
       // On server, mark native modules as external (don't bundle them)
       config.externals = config.externals || [];
       if (Array.isArray(config.externals)) {
-        config.externals.push('canvas', 'pdfjs-dist', 'tesseract.js', 'pdf-parse');
+        config.externals.push('canvas', 'pdfjs-dist', 'tesseract.js');
       } else {
         config.externals = [
           config.externals,
           'canvas',
           'pdfjs-dist',
           'tesseract.js',
-          'pdf-parse',
         ];
       }
+      
+      // Note: pdfjs-dist/legacy/build/pdf.js is loaded dynamically at runtime
+      // The dynamic require() with join() prevents Next.js from statically analyzing it
     }
     
     return config;
@@ -64,3 +36,5 @@ const nextConfig = {
 }
 
 module.exports = nextConfig
+
+

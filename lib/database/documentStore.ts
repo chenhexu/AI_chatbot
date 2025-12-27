@@ -23,12 +23,6 @@ export interface ChunkRecord {
   created_at: Date;
 }
 
-// Extended TextChunk with embedding
-export interface TextChunkWithEmbedding extends TextChunk {
-  id?: number;
-  embedding?: number[];
-}
-
 /**
  * Store a document in the database
  */
@@ -61,7 +55,7 @@ export async function storeDocument(
  */
 export async function storeChunks(
   documentId: number,
-  chunks: Array<{ text: string; index: number; source: string; pdfUrl?: string; embedding?: number[] }>
+  chunks: Array<{ text: string; index: number; source: string; pdfUrl?: string }>
 ): Promise<void> {
   // Delete existing chunks for this document
   await query('DELETE FROM chunks WHERE document_id = $1', [documentId]);
@@ -74,27 +68,20 @@ export async function storeChunks(
   let paramIndex = 1;
 
   for (const chunk of chunks) {
-    values.push(`($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5})`);
-    params.push(
-      documentId, 
-      chunk.text, 
-      chunk.index, 
-      chunk.source, 
-      chunk.pdfUrl || null,
-      chunk.embedding ? JSON.stringify(chunk.embedding) : null
-    );
-    paramIndex += 6;
+    values.push(`($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4})`);
+    params.push(documentId, chunk.text, chunk.index, chunk.source, chunk.pdfUrl || null);
+    paramIndex += 5;
   }
 
   await query(
-    `INSERT INTO chunks (document_id, text, chunk_index, source, pdf_url, embedding)
+    `INSERT INTO chunks (document_id, text, chunk_index, source, pdf_url)
      VALUES ${values.join(', ')}`,
     params
   );
 }
 
 /**
- * Load all chunks from database (without embeddings for faster loading)
+ * Load all chunks from database (without embeddings)
  */
 export async function loadAllChunks(): Promise<TextChunk[]> {
   try {
@@ -122,9 +109,9 @@ export async function loadAllChunks(): Promise<TextChunk[]> {
 }
 
 /**
- * Load all chunks with embeddings for semantic search
+ * Load all chunks with embeddings from database
  */
-export async function loadAllChunksWithEmbeddings(): Promise<TextChunkWithEmbedding[]> {
+export async function loadAllChunksWithEmbeddings(): Promise<Array<TextChunk & { id: number; embedding?: number[] }>> {
   try {
     console.log('📡 Loading chunks with embeddings...');
     const result = await query<{ 
@@ -150,7 +137,7 @@ export async function loadAllChunksWithEmbeddings(): Promise<TextChunkWithEmbedd
       embedding: row.embedding || undefined,
     }));
     
-    const withEmbeddings = chunks.filter(c => c.embedding).length;
+    const withEmbeddings = chunks.filter(c => c.embedding && c.embedding.length > 0).length;
     console.log(`✅ Loaded ${chunks.length} chunks (${withEmbeddings} with embeddings)`);
     return chunks;
   } catch (error) {
@@ -160,24 +147,25 @@ export async function loadAllChunksWithEmbeddings(): Promise<TextChunkWithEmbedd
 }
 
 /**
- * Update embedding for a chunk
+ * Get chunks that don't have embeddings yet
  */
-export async function updateChunkEmbedding(chunkId: number, embedding: number[]): Promise<void> {
-  await query(
-    `UPDATE chunks SET embedding = $1 WHERE id = $2`,
-    [JSON.stringify(embedding), chunkId]
+export async function getChunksWithoutEmbeddings(limit: number = 50): Promise<Array<{ id: number; text: string }>> {
+  const result = await query<{ id: number; text: string }>(
+    `SELECT id, text FROM chunks WHERE embedding IS NULL LIMIT $1`,
+    [limit]
   );
+  return result.rows;
 }
 
 /**
- * Update embeddings for multiple chunks in batch
+ * Update chunk embeddings in batch
  */
 export async function updateChunkEmbeddingsBatch(
   updates: Array<{ id: number; embedding: number[] }>
 ): Promise<void> {
   if (updates.length === 0) return;
-
-  // Use a transaction for batch updates
+  
+  // Update each chunk's embedding
   for (const update of updates) {
     await query(
       `UPDATE chunks SET embedding = $1 WHERE id = $2`,
@@ -187,30 +175,35 @@ export async function updateChunkEmbeddingsBatch(
 }
 
 /**
- * Get chunks without embeddings (for migration)
- */
-export async function getChunksWithoutEmbeddings(): Promise<Array<{ id: number; text: string }>> {
-  const result = await query<{ id: number; text: string }>(
-    `SELECT id, text FROM chunks WHERE embedding IS NULL ORDER BY id`
-  );
-  return result.rows;
-}
-
-/**
- * Get count of chunks with/without embeddings
+ * Get embedding statistics
  */
 export async function getEmbeddingStats(): Promise<{ total: number; withEmbedding: number; withoutEmbedding: number }> {
   const totalResult = await query<{ count: string }>('SELECT COUNT(*) as count FROM chunks');
-  const withEmbeddingResult = await query<{ count: string }>('SELECT COUNT(*) as count FROM chunks WHERE embedding IS NOT NULL');
+  const withResult = await query<{ count: string }>('SELECT COUNT(*) as count FROM chunks WHERE embedding IS NOT NULL');
   
   const total = parseInt(totalResult.rows[0].count, 10);
-  const withEmbedding = parseInt(withEmbeddingResult.rows[0].count, 10);
+  const withEmbedding = parseInt(withResult.rows[0].count, 10);
   
   return {
     total,
     withEmbedding,
     withoutEmbedding: total - withEmbedding,
   };
+}
+
+/**
+ * Ensure embedding column exists
+ */
+export async function ensureEmbeddingColumn(): Promise<void> {
+  try {
+    await query(`
+      ALTER TABLE chunks ADD COLUMN IF NOT EXISTS embedding JSONB
+    `);
+    console.log('✅ Embedding column ensured');
+  } catch (error) {
+    // Column might already exist, which is fine
+    console.log('ℹ️  Embedding column check completed');
+  }
 }
 
 /**
@@ -237,28 +230,3 @@ export async function clearAllData(): Promise<void> {
   await query('DELETE FROM documents');
 }
 
-/**
- * Add embedding column if it doesn't exist (migration helper)
- */
-export async function ensureEmbeddingColumn(): Promise<void> {
-  try {
-    // Check if column exists
-    const result = await query<{ column_name: string }>(
-      `SELECT column_name 
-       FROM information_schema.columns 
-       WHERE table_name = 'chunks' AND column_name = 'embedding'`
-    );
-    
-    if (result.rows.length === 0) {
-      console.log('📋 Adding embedding column to chunks table...');
-      await query('ALTER TABLE chunks ADD COLUMN embedding JSONB');
-      await query('CREATE INDEX IF NOT EXISTS idx_chunks_has_embedding ON chunks((embedding IS NOT NULL))');
-      console.log('✅ Embedding column added');
-    } else {
-      console.log('✅ Embedding column already exists');
-    }
-  } catch (error) {
-    console.error('❌ Error ensuring embedding column:', error);
-    throw error;
-  }
-}

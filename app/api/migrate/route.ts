@@ -1,22 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { initializeDatabase, closeDatabase } from '@/lib/database/client';
+import { loadAllDocuments } from '@/lib/documentLoader';
+import { processDocuments } from '@/lib/rag';
 import { 
   storeDocument, 
   storeChunks, 
   clearAllData, 
   getDocumentCount, 
   getChunkCount,
-  ensureEmbeddingColumn,
-  getEmbeddingStats,
   getChunksWithoutEmbeddings,
-  updateChunkEmbeddingsBatch
+  updateChunkEmbeddingsBatch,
+  getEmbeddingStats,
+  ensureEmbeddingColumn
 } from '@/lib/database/documentStore';
-import { generateEmbeddingsBatch } from '@/lib/embeddings';
+import { generateEmbedding } from '@/lib/embeddings';
 
 /**
- * API endpoint to check migration status and generate embeddings
- * NOTE: For Vercel, migration must be done via /api/upload-data endpoint
- * This keeps the bundle small by not including heavy OCR dependencies
+ * API endpoint to migrate data from filesystem to database
+ * This can be called from the browser since Render free tier doesn't have shell access
+ * 
+ * GET /api/migrate - Check migration status
+ * POST /api/migrate - Run migration
  */
 export async function GET() {
   try {
@@ -27,26 +31,12 @@ export async function GET() {
       );
     }
 
+    // Ensure embedding column exists
+    await ensureEmbeddingColumn();
+
     const docCount = await getDocumentCount();
     const chunkCount = await getChunkCount();
-    
-    // Ensure embedding column exists before getting stats
-    let embeddingStats = { total: chunkCount, withEmbedding: 0, withoutEmbedding: chunkCount };
-    try {
-      await ensureEmbeddingColumn();
-      const stats = await getEmbeddingStats();
-      // Only use stats if they're valid (total > 0 or matches chunkCount)
-      if (stats.total > 0 || stats.total === chunkCount) {
-        embeddingStats = stats;
-      } else {
-        console.log(`Stats mismatch: stats.total=${stats.total}, chunkCount=${chunkCount}, using chunkCount`);
-        embeddingStats = { total: chunkCount, withEmbedding: stats.withEmbedding, withoutEmbedding: chunkCount - stats.withEmbedding };
-      }
-    } catch (e) {
-      console.error('Error getting embedding stats:', e);
-      // If stats fail, use chunk count as total
-      embeddingStats = { total: chunkCount, withEmbedding: 0, withoutEmbedding: chunkCount };
-    }
+    const embeddingStats = await getEmbeddingStats();
 
     return NextResponse.json({
       status: 'ready',
@@ -55,12 +45,12 @@ export async function GET() {
       embeddings: embeddingStats,
       message: docCount > 0 
         ? `Database has ${docCount} documents and ${chunkCount} chunks (${embeddingStats.withEmbedding} with embeddings)`
-        : 'Database is empty. Upload data first via /admin/migrate'
+        : 'Database is empty. Run migration to populate it.'
     });
   } catch (error) {
     return NextResponse.json(
       { 
-        error: 'Failed to check status',
+        error: 'Failed to check migration status',
         details: error instanceof Error ? error.message : String(error),
         status: 'error'
       },
@@ -79,39 +69,114 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json().catch(() => ({}));
-    const action = body.action as string | undefined;
+    const action = body.action || 'migrate';
+    const force = body.force === true; // Allow forcing re-migration
 
-    // Handle embedding generation action
-    // Use small batch size (10) to avoid Vercel 10s timeout
+    // Handle embedding generation
     if (action === 'embeddings') {
       return await handleEmbeddingGeneration(body.batchSize || 10);
     }
 
-    // Handle clear action
-    if (action === 'clear') {
-      await clearAllData();
+    console.log('🚀 Starting migration to database...');
+
+    // Initialize database schema
+    console.log('📋 Initializing database schema...');
+    await initializeDatabase();
+
+    // Check if database already has data
+    const existingCount = await getDocumentCount();
+    
+    if (existingCount > 0 && !force) {
       return NextResponse.json({
-        status: 'success',
-        message: 'All data cleared'
+        status: 'already_migrated',
+        documents: existingCount,
+        chunks: await getChunkCount(),
+        message: 'Database already contains data. Use force=true to re-migrate.'
       });
     }
 
-    // Handle direct data upload (chunks already processed)
-    if (action === 'upload' && body.documents) {
-      return await handleDataUpload(body.documents, body.force === true);
+    if (existingCount > 0 && force) {
+      console.log(`⚠️  Clearing existing ${existingCount} documents...`);
+      await clearAllData();
     }
 
+    // Load documents from filesystem
+    console.log('📂 Loading documents from filesystem...');
+    const documents = await loadAllDocuments();
+    console.log(`✅ Loaded ${documents.length} documents from filesystem`);
+
+    if (documents.length === 0) {
+      return NextResponse.json({
+        status: 'no_data',
+        message: 'No documents found in filesystem. Make sure data/scraped/ folder has data.'
+      });
+    }
+
+    // Process documents into chunks
+    console.log('🔪 Processing documents into chunks...');
+    const chunks = processDocuments(documents);
+    console.log(`✅ Created ${chunks.length} chunks`);
+
+    // Store documents and chunks in database
+    console.log('💾 Storing in database...');
+    let storedDocs = 0;
+    let storedChunks = 0;
+
+    // Group chunks by document source
+    const chunksBySource = new Map<string, typeof chunks>();
+    for (const chunk of chunks) {
+      if (!chunksBySource.has(chunk.source)) {
+        chunksBySource.set(chunk.source, []);
+      }
+      chunksBySource.get(chunk.source)!.push(chunk);
+    }
+
+    // Store each document
+    for (const doc of documents) {
+      const documentId = await storeDocument(
+        doc.id,
+        doc.id.startsWith('file://') ? 'file' : 'external',
+        doc.content,
+        doc.id.split('/').pop() || doc.id,
+        doc.pdfUrl
+      );
+
+      // Store chunks for this document
+      const docChunks = chunksBySource.get(doc.id) || [];
+      if (docChunks.length > 0) {
+        await storeChunks(
+          documentId,
+          docChunks.map(chunk => ({
+            text: chunk.text,
+            index: chunk.index,
+            source: chunk.source,
+            pdfUrl: chunk.pdfUrl,
+          }))
+        );
+        storedChunks += docChunks.length;
+      }
+
+      storedDocs++;
+    }
+
+    await closeDatabase();
+
+    console.log(`✅ Migration complete! Documents: ${storedDocs}, Chunks: ${storedChunks}`);
+
     return NextResponse.json({
-      error: 'Invalid action',
-      message: 'Use action: "embeddings", "clear", or "upload"'
-    }, { status: 400 });
+      status: 'success',
+      documents: storedDocs,
+      chunks: storedChunks,
+      message: `Successfully migrated ${storedDocs} documents and ${storedChunks} chunks to database`
+    });
 
   } catch (error) {
-    console.error('❌ Error:', error);
+    console.error('❌ Migration failed:', error);
+    await closeDatabase().catch(() => {}); // Try to close, but don't fail if it errors
     
     return NextResponse.json(
       { 
-        error: 'Operation failed',
+        error: 'Migration failed',
         details: error instanceof Error ? error.message : String(error),
         status: 'error'
       },
@@ -123,59 +188,61 @@ export async function POST(request: NextRequest) {
 /**
  * Handle embedding generation for chunks
  */
-async function handleEmbeddingGeneration(batchSize: number = 50) {
+async function handleEmbeddingGeneration(batchSize: number = 10) {
   try {
-    console.log('🧠 Generating embeddings...');
+    console.log(`🧠 Starting embedding generation (batch size: ${batchSize})...`);
     
+    // Ensure embedding column exists
     await ensureEmbeddingColumn();
     
-    const chunksToProcess = await getChunksWithoutEmbeddings();
+    // Get chunks without embeddings
+    const chunks = await getChunksWithoutEmbeddings(batchSize);
     
-    if (chunksToProcess.length === 0) {
+    if (chunks.length === 0) {
       const stats = await getEmbeddingStats();
       return NextResponse.json({
         status: 'complete',
-        processed: 0,
-        remaining: 0,
-        total: stats.total,
-        message: 'All chunks have embeddings'
+        message: 'All chunks already have embeddings',
+        stats
       });
     }
     
-    const batch = chunksToProcess.slice(0, batchSize);
-    const texts = batch.map(c => c.text);
+    console.log(`📝 Generating embeddings for ${chunks.length} chunks...`);
     
-    console.log(`🔄 Generating ${batch.length} embeddings...`);
-    const embeddings = await generateEmbeddingsBatch(texts);
+    // Generate embeddings for each chunk
+    const updates: Array<{ id: number; embedding: number[] }> = [];
     
-    const updates = batch.map((chunk, i) => ({
-      id: chunk.id,
-      embedding: embeddings[i],
-    }));
+    for (const chunk of chunks) {
+      try {
+        const embedding = await generateEmbedding(chunk.text);
+        updates.push({ id: chunk.id, embedding });
+        console.log(`  ✅ Generated embedding for chunk ${chunk.id}`);
+      } catch (error) {
+        console.error(`  ❌ Failed to generate embedding for chunk ${chunk.id}:`, error);
+      }
+    }
     
-    await updateChunkEmbeddingsBatch(updates);
+    // Save embeddings to database
+    if (updates.length > 0) {
+      await updateChunkEmbeddingsBatch(updates);
+      console.log(`💾 Saved ${updates.length} embeddings to database`);
+    }
     
+    // Get updated stats
     const stats = await getEmbeddingStats();
-    const remaining = chunksToProcess.length - batch.length;
-    
-    console.log(`✅ Generated ${batch.length} embeddings. ${remaining} remaining.`);
     
     return NextResponse.json({
-      status: remaining > 0 ? 'in_progress' : 'complete',
-      processed: batch.length,
-      remaining,
-      total: stats.total,
-      withEmbedding: stats.withEmbedding,
-      message: remaining > 0 
-        ? `Generated ${batch.length} embeddings. ${remaining} remaining.`
-        : `All ${stats.total} chunks now have embeddings.`
+      status: 'success',
+      processed: updates.length,
+      remaining: stats.withoutEmbedding,
+      stats,
+      message: `Generated ${updates.length} embeddings. ${stats.withoutEmbedding} remaining.`
     });
     
   } catch (error) {
     console.error('❌ Embedding generation failed:', error);
-    
     return NextResponse.json(
-      {
+      { 
         error: 'Embedding generation failed',
         details: error instanceof Error ? error.message : String(error),
         status: 'error'
@@ -185,91 +252,3 @@ async function handleEmbeddingGeneration(batchSize: number = 50) {
   }
 }
 
-/**
- * Handle direct data upload (pre-processed documents)
- */
-async function handleDataUpload(
-  documents: Array<{ id: string; content: string; pdfUrl?: string }>,
-  force: boolean = false
-) {
-  try {
-    console.log('📤 Uploading data...');
-    
-    await initializeDatabase();
-    
-    const existingCount = await getDocumentCount();
-    
-    if (existingCount > 0 && !force) {
-      return NextResponse.json({
-        status: 'already_exists',
-        documents: existingCount,
-        message: 'Database has data. Use force=true to replace.'
-      });
-    }
-    
-    if (existingCount > 0 && force) {
-      await clearAllData();
-    }
-    
-    // Simple chunking function
-    const chunkText = (text: string, maxLength: number = 1500): string[] => {
-      const chunks: string[] = [];
-      const paragraphs = text.split(/\n\n+/);
-      let currentChunk = '';
-      
-      for (const para of paragraphs) {
-        if ((currentChunk + para).length > maxLength && currentChunk) {
-          chunks.push(currentChunk.trim());
-          currentChunk = para;
-        } else {
-          currentChunk += (currentChunk ? '\n\n' : '') + para;
-        }
-      }
-      if (currentChunk.trim()) {
-        chunks.push(currentChunk.trim());
-      }
-      return chunks.length > 0 ? chunks : [text];
-    };
-    
-    let storedDocs = 0;
-    let storedChunks = 0;
-    
-    for (const doc of documents) {
-      const docId = await storeDocument(
-        doc.id,
-        'uploaded',
-        doc.content,
-        doc.id.split('/').pop() || doc.id,
-        doc.pdfUrl
-      );
-      
-      const textChunks = chunkText(doc.content);
-      if (textChunks.length > 0) {
-        await storeChunks(
-          docId,
-          textChunks.map((text, index) => ({
-            text,
-            index,
-            source: doc.id,
-            pdfUrl: doc.pdfUrl,
-          }))
-        );
-        storedChunks += textChunks.length;
-      }
-      storedDocs++;
-    }
-    
-    await closeDatabase();
-    
-    return NextResponse.json({
-      status: 'success',
-      documents: storedDocs,
-      chunks: storedChunks,
-      message: `Uploaded ${storedDocs} documents, ${storedChunks} chunks`
-    });
-    
-  } catch (error) {
-    await closeDatabase().catch(() => {});
-    throw error;
-  }
-}
