@@ -110,36 +110,70 @@ export async function loadAllChunks(): Promise<TextChunk[]> {
 
 /**
  * Load all chunks with embeddings from database
+ * Falls back to loading without embeddings if the column doesn't exist
  */
 export async function loadAllChunksWithEmbeddings(): Promise<Array<TextChunk & { id: number; embedding?: number[] }>> {
   try {
     console.log('📡 Loading chunks with embeddings...');
-    const result = await query<{ 
-      id: number;
-      text: string; 
-      source: string; 
-      chunk_index: number; 
-      pdf_url: string | null;
-      embedding: number[] | null;
-    }>(
-      `SELECT id, text, source, chunk_index, pdf_url, embedding
-       FROM chunks
-       ORDER BY document_id, chunk_index`
-    );
-
-    console.log(`📊 Query returned ${result.rows.length} rows`);
-    const chunks = result.rows.map(row => ({
-      id: row.id,
-      text: row.text,
-      source: row.source,
-      index: row.chunk_index,
-      pdfUrl: row.pdf_url || undefined,
-      embedding: row.embedding || undefined,
-    }));
     
-    const withEmbeddings = chunks.filter(c => c.embedding && c.embedding.length > 0).length;
-    console.log(`✅ Loaded ${chunks.length} chunks (${withEmbeddings} with embeddings)`);
-    return chunks;
+    // Try to load with embeddings first
+    try {
+      const result = await query<{ 
+        id: number;
+        text: string; 
+        source: string; 
+        chunk_index: number; 
+        pdf_url: string | null;
+        embedding: number[] | null;
+      }>(
+        `SELECT id, text, source, chunk_index, pdf_url, embedding
+         FROM chunks
+         ORDER BY document_id, chunk_index`
+      );
+
+      console.log(`📊 Query returned ${result.rows.length} rows`);
+      const chunks = result.rows.map(row => ({
+        id: row.id,
+        text: row.text,
+        source: row.source,
+        index: row.chunk_index,
+        pdfUrl: row.pdf_url || undefined,
+        embedding: row.embedding || undefined,
+      }));
+      
+      const withEmbeddings = chunks.filter(c => c.embedding && c.embedding.length > 0).length;
+      console.log(`✅ Loaded ${chunks.length} chunks (${withEmbeddings} with embeddings)`);
+      return chunks;
+    } catch (embeddingError: any) {
+      // If embedding column doesn't exist, fall back to loading without it
+      if (embeddingError?.message?.includes('embedding') || embeddingError?.code === '42703') {
+        console.log('⚠️  Embedding column not found, loading without embeddings...');
+        const result = await query<{ 
+          id: number;
+          text: string; 
+          source: string; 
+          chunk_index: number; 
+          pdf_url: string | null;
+        }>(
+          `SELECT id, text, source, chunk_index, pdf_url
+           FROM chunks
+           ORDER BY document_id, chunk_index`
+        );
+
+        const chunks = result.rows.map(row => ({
+          id: row.id,
+          text: row.text,
+          source: row.source,
+          index: row.chunk_index,
+          pdfUrl: row.pdf_url || undefined,
+          embedding: undefined,
+        }));
+        
+        console.log(`✅ Loaded ${chunks.length} chunks (without embeddings)`);
+        return chunks;
+      }
+      throw embeddingError;
+    }
   } catch (error) {
     console.error('❌ Error in loadAllChunksWithEmbeddings:', error);
     throw error;
