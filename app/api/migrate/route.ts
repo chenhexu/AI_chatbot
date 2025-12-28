@@ -2,18 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { initializeDatabase, closeDatabase } from '@/lib/database/client';
 import { loadAllDocuments } from '@/lib/documentLoader';
 import { processDocuments } from '@/lib/rag';
-import { 
-  storeDocument, 
-  storeChunks, 
-  clearAllData, 
-  getDocumentCount, 
-  getChunkCount,
-  getChunksWithoutEmbeddings,
-  updateChunkEmbeddingsBatch,
-  getEmbeddingStats,
-  ensureEmbeddingColumn
-} from '@/lib/database/documentStore';
-import { generateEmbedding } from '@/lib/embeddings';
+import { storeDocument, storeChunks, clearAllData, getDocumentCount, getChunkCount } from '@/lib/database/documentStore';
 
 /**
  * API endpoint to migrate data from filesystem to database
@@ -31,20 +20,15 @@ export async function GET() {
       );
     }
 
-    // Ensure embedding column exists
-    await ensureEmbeddingColumn();
-
     const docCount = await getDocumentCount();
     const chunkCount = await getChunkCount();
-    const embeddingStats = await getEmbeddingStats();
 
     return NextResponse.json({
       status: 'ready',
       documents: docCount,
       chunks: chunkCount,
-      embeddings: embeddingStats,
       message: docCount > 0 
-        ? `Database has ${docCount} documents and ${chunkCount} chunks (${embeddingStats.withEmbedding} with embeddings)`
+        ? `Database has ${docCount} documents and ${chunkCount} chunks`
         : 'Database is empty. Run migration to populate it.'
     });
   } catch (error) {
@@ -69,13 +53,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json().catch(() => ({}));
-    const action = body.action || 'migrate';
     const force = body.force === true; // Allow forcing re-migration
-
-    // Handle embedding generation
-    if (action === 'embeddings') {
-      return await handleEmbeddingGeneration(body.batchSize || 10);
-    }
 
     console.log('🚀 Starting migration to database...');
 
@@ -177,73 +155,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { 
         error: 'Migration failed',
-        details: error instanceof Error ? error.message : String(error),
-        status: 'error'
-      },
-      { status: 500 }
-    );
-  }
-}
-
-/**
- * Handle embedding generation for chunks
- */
-async function handleEmbeddingGeneration(batchSize: number = 10) {
-  try {
-    console.log(`🧠 Starting embedding generation (batch size: ${batchSize})...`);
-    
-    // Ensure embedding column exists
-    await ensureEmbeddingColumn();
-    
-    // Get chunks without embeddings
-    const chunks = await getChunksWithoutEmbeddings(batchSize);
-    
-    if (chunks.length === 0) {
-      const stats = await getEmbeddingStats();
-      return NextResponse.json({
-        status: 'complete',
-        message: 'All chunks already have embeddings',
-        stats
-      });
-    }
-    
-    console.log(`📝 Generating embeddings for ${chunks.length} chunks...`);
-    
-    // Generate embeddings for each chunk
-    const updates: Array<{ id: number; embedding: number[] }> = [];
-    
-    for (const chunk of chunks) {
-      try {
-        const embedding = await generateEmbedding(chunk.text);
-        updates.push({ id: chunk.id, embedding });
-        console.log(`  ✅ Generated embedding for chunk ${chunk.id}`);
-      } catch (error) {
-        console.error(`  ❌ Failed to generate embedding for chunk ${chunk.id}:`, error);
-      }
-    }
-    
-    // Save embeddings to database
-    if (updates.length > 0) {
-      await updateChunkEmbeddingsBatch(updates);
-      console.log(`💾 Saved ${updates.length} embeddings to database`);
-    }
-    
-    // Get updated stats
-    const stats = await getEmbeddingStats();
-    
-    return NextResponse.json({
-      status: 'success',
-      processed: updates.length,
-      remaining: stats.withoutEmbedding,
-      stats,
-      message: `Generated ${updates.length} embeddings. ${stats.withoutEmbedding} remaining.`
-    });
-    
-  } catch (error) {
-    console.error('❌ Embedding generation failed:', error);
-    return NextResponse.json(
-      { 
-        error: 'Embedding generation failed',
         details: error instanceof Error ? error.message : String(error),
         status: 'error'
       },

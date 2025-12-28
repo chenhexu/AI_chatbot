@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { loadAllDocuments } from '@/lib/documentLoader';
-import { processDocuments, type TextChunk, type TextChunkWithEmbedding } from '@/lib/rag';
+import { processDocuments, type TextChunk } from '@/lib/rag';
 import { generateChatResponse } from '@/lib/openai';
-import { loadAllChunksWithEmbeddings } from '@/lib/database/documentStore';
+import { loadAllChunks } from '@/lib/database/documentStore';
 import { query } from '@/lib/database/client';
 
 // Cache document chunks in memory (in production, consider using Redis or similar)
-let cachedChunks: TextChunkWithEmbedding[] | null = null;
+let cachedChunks: TextChunk[] | null = null;
 let chunksLastFetched: number = 0;
 const CACHE_DURATION = 60 * 60 * 1000; // 1 hour in milliseconds
 let isLoadingDocuments = false; // Prevent concurrent loading
@@ -26,7 +26,7 @@ async function preloadDocumentChunks(): Promise<void> {
 /**
  * Get document chunks, using cache if available
  */
-async function getDocumentChunks(): Promise<TextChunkWithEmbedding[]> {
+async function getDocumentChunks(): Promise<TextChunk[]> {
   const now = Date.now();
   
   // Return cached chunks if still valid AND not empty (if we have DATABASE_URL, don't use empty cache)
@@ -89,11 +89,10 @@ async function getDocumentChunks(): Promise<TextChunkWithEmbedding[]> {
           }
         }
         
-        console.log('📡 Loading chunks from database (with embeddings)...');
-        const dbChunks = await loadAllChunksWithEmbeddings();
+        console.log('📡 Loading chunks from database...');
+        const dbChunks = await loadAllChunks();
         console.log(`📊 Query returned ${dbChunks.length} rows`);
-        const withEmbeddings = dbChunks.filter(c => c.embedding && c.embedding.length > 0).length;
-        console.log(`📊 Database: ${dbChunks.length} chunks (${withEmbeddings} with embeddings)`);
+        console.log(`📊 Database query returned ${dbChunks.length} chunks`);
         if (dbChunks.length > 0) {
           cachedChunks = dbChunks;
           chunksLastFetched = Date.now();

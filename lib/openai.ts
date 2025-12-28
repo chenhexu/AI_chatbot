@@ -16,46 +16,60 @@ function getOpenAIClient(): OpenAI {
 }
 
 /**
- * Simple English to French keyword mapping for common school-related terms
- * This avoids the need for API calls for translation
+ * Helper: Promise with timeout
  */
-const englishToFrenchKeywords: { [key: string]: string } = {
-  'school': 'école',
-  'open': 'ouvert ouvrir ouverture',
-  'when': 'quand',
-  'principal': 'directrice directeur',
-  'director': 'directrice directeur',
-  'teacher': 'enseignant enseignante professeur',
-  'student': 'élève étudiant',
-  'schedule': 'horaire',
-  'calendar': 'calendrier',
-  'activity': 'activité',
-  'activities': 'activités',
-  'robotics': 'robotique',
-  'cafeteria': 'cafétéria',
-  'vegetarian': 'végétarien',
-  'staff': 'personnel',
-  'project': 'projet',
-  'personal': 'personnel',
-};
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms))
+  ]);
+}
 
 /**
- * Expand English query with French equivalents for better matching
- * This is faster and more reliable than API translation
+ * Translate query to French for better matching with French documents
+ * Has a 2-second timeout - if translation takes too long, uses original query
  */
-export function expandQueryWithFrench(query: string): string {
+export async function translateQueryToFrench(query: string, client: OpenAI): Promise<string> {
+  // Simple heuristic: if query contains common English words, translate it
+  const englishWords = ['the', 'is', 'are', 'who', 'what', 'where', 'when', 'why', 'how', 'can', 'will', 'would', 'could', 'should', 'do', 'does', 'did', 'have', 'has', 'principal', 'school', 'open', 'teacher', 'student'];
   const queryLower = query.toLowerCase();
-  const words = queryLower.split(/\s+/);
-  const expansions: string[] = [query];
+  const hasEnglishWords = englishWords.some(word => {
+    // Match whole words only
+    const regex = new RegExp(`\\b${word}\\b`);
+    return regex.test(queryLower);
+  });
   
-  for (const word of words) {
-    if (englishToFrenchKeywords[word]) {
-      expansions.push(englishToFrenchKeywords[word]);
-    }
+  if (!hasEnglishWords) {
+    // Probably already in French
+    return query;
   }
   
-  // Return expanded query (original + French keywords)
-  return expansions.join(' ');
+  // Try translation with 2-second timeout
+  const translationPromise = (async () => {
+    const response = await client.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: 'Translate to French. Return ONLY the translation, nothing else.'
+        },
+        { role: 'user', content: query }
+      ],
+      temperature: 0.1,
+      max_tokens: 100,
+    });
+    return response.choices[0]?.message?.content?.trim() || query;
+  })();
+  
+  const result = await withTimeout(translationPromise, 2000, query);
+  
+  if (result !== query) {
+    console.log(`✅ Translation: "${query}" -> "${result}"`);
+  } else {
+    console.log(`⚠️  Translation skipped/timed out, using original: "${query}"`);
+  }
+  
+  return result;
 }
 
 /**
@@ -71,12 +85,36 @@ export async function generateChatResponse(
   // Try gpt-5-nano first, fallback to gpt-4o-mini if not available
   const model = process.env.OPENAI_MODEL || 'gpt-5-nano';
   
-  // Expand query with French keywords for better matching (no API call needed)
-  const expandedQuery = expandQueryWithFrench(userMessage);
-  console.log(`${logPrefix} 🌐 Expanded query: "${userMessage}" -> "${expandedQuery}"`);
+  // Translate query to French for better document matching
+  let translatedQuery: string;
+  try {
+    translatedQuery = await translateQueryToFrench(userMessage, client);
+    console.log(`${logPrefix} 🌐 Translation: "${userMessage}" -> "${translatedQuery}"`);
+  } catch (error) {
+    console.error('❌ Translation error:', error);
+    // If translation fails, use original query
+    translatedQuery = userMessage;
+    console.log(`⚠️  Using original query (translation failed): "${userMessage}"`);
+  }
   
-  // Find relevant chunks using expanded query
-  const uniqueChunks = findRelevantChunks(documentChunks, expandedQuery, 6);
+  // Use both original and translated query for chunk finding (only if translation changed the query)
+  // This ensures we find relevant chunks regardless of language
+  const useBothQueries = translatedQuery.toLowerCase() !== userMessage.toLowerCase();
+  let uniqueChunks: TextChunk[];
+  
+  if (useBothQueries) {
+    const relevantChunksOriginal = findRelevantChunks(documentChunks, userMessage, 4);
+    const relevantChunksTranslated = findRelevantChunks(documentChunks, translatedQuery, 4);
+    
+    // Combine and deduplicate chunks
+    const allChunks = [...relevantChunksOriginal, ...relevantChunksTranslated];
+    uniqueChunks = Array.from(
+      new Map(allChunks.map(chunk => [chunk.source + chunk.index, chunk])).values()
+    ).slice(0, 6); // Take top 6 unique chunks (reduced from 8 for speed)
+  } else {
+    // Query is already in French, only search once
+    uniqueChunks = findRelevantChunks(documentChunks, userMessage, 6);
+  }
   const context = buildContextString(uniqueChunks);
   
   // Limit context size to avoid token limit errors

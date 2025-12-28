@@ -19,7 +19,6 @@ export interface ChunkRecord {
   chunk_index: number;
   source: string;
   pdf_url: string | null;
-  embedding: number[] | null;
   created_at: Date;
 }
 
@@ -81,7 +80,7 @@ export async function storeChunks(
 }
 
 /**
- * Load all chunks from database (without embeddings)
+ * Load all chunks from database
  */
 export async function loadAllChunks(): Promise<TextChunk[]> {
   try {
@@ -105,138 +104,6 @@ export async function loadAllChunks(): Promise<TextChunk[]> {
   } catch (error) {
     console.error('❌ Error in loadAllChunks:', error);
     throw error;
-  }
-}
-
-/**
- * Load all chunks with embeddings from database
- * Falls back to loading without embeddings if the column doesn't exist
- */
-export async function loadAllChunksWithEmbeddings(): Promise<Array<TextChunk & { id: number; embedding?: number[] }>> {
-  try {
-    console.log('📡 Loading chunks with embeddings...');
-    
-    // Try to load with embeddings first
-    try {
-      const result = await query<{ 
-        id: number;
-        text: string; 
-        source: string; 
-        chunk_index: number; 
-        pdf_url: string | null;
-        embedding: number[] | null;
-      }>(
-        `SELECT id, text, source, chunk_index, pdf_url, embedding
-         FROM chunks
-         ORDER BY document_id, chunk_index`
-      );
-
-      console.log(`📊 Query returned ${result.rows.length} rows`);
-      const chunks = result.rows.map(row => ({
-        id: row.id,
-        text: row.text,
-        source: row.source,
-        index: row.chunk_index,
-        pdfUrl: row.pdf_url || undefined,
-        embedding: row.embedding || undefined,
-      }));
-      
-      const withEmbeddings = chunks.filter(c => c.embedding && c.embedding.length > 0).length;
-      console.log(`✅ Loaded ${chunks.length} chunks (${withEmbeddings} with embeddings)`);
-      return chunks;
-    } catch (embeddingError: any) {
-      // If embedding column doesn't exist, fall back to loading without it
-      if (embeddingError?.message?.includes('embedding') || embeddingError?.code === '42703') {
-        console.log('⚠️  Embedding column not found, loading without embeddings...');
-        const result = await query<{ 
-          id: number;
-          text: string; 
-          source: string; 
-          chunk_index: number; 
-          pdf_url: string | null;
-        }>(
-          `SELECT id, text, source, chunk_index, pdf_url
-           FROM chunks
-           ORDER BY document_id, chunk_index`
-        );
-
-        const chunks = result.rows.map(row => ({
-          id: row.id,
-          text: row.text,
-          source: row.source,
-          index: row.chunk_index,
-          pdfUrl: row.pdf_url || undefined,
-          embedding: undefined,
-        }));
-        
-        console.log(`✅ Loaded ${chunks.length} chunks (without embeddings)`);
-        return chunks;
-      }
-      throw embeddingError;
-    }
-  } catch (error) {
-    console.error('❌ Error in loadAllChunksWithEmbeddings:', error);
-    throw error;
-  }
-}
-
-/**
- * Get chunks that don't have embeddings yet
- */
-export async function getChunksWithoutEmbeddings(limit: number = 50): Promise<Array<{ id: number; text: string }>> {
-  const result = await query<{ id: number; text: string }>(
-    `SELECT id, text FROM chunks WHERE embedding IS NULL LIMIT $1`,
-    [limit]
-  );
-  return result.rows;
-}
-
-/**
- * Update chunk embeddings in batch
- */
-export async function updateChunkEmbeddingsBatch(
-  updates: Array<{ id: number; embedding: number[] }>
-): Promise<void> {
-  if (updates.length === 0) return;
-  
-  // Update each chunk's embedding
-  for (const update of updates) {
-    await query(
-      `UPDATE chunks SET embedding = $1 WHERE id = $2`,
-      [JSON.stringify(update.embedding), update.id]
-    );
-  }
-}
-
-/**
- * Get embedding statistics
- */
-export async function getEmbeddingStats(): Promise<{ total: number; withEmbedding: number; withoutEmbedding: number }> {
-  const totalResult = await query<{ count: string }>('SELECT COUNT(*) as count FROM chunks');
-  const withResult = await query<{ count: string }>('SELECT COUNT(*) as count FROM chunks WHERE embedding IS NOT NULL');
-  
-  const total = parseInt(totalResult.rows[0].count, 10);
-  const withEmbedding = parseInt(withResult.rows[0].count, 10);
-  
-  return {
-    total,
-    withEmbedding,
-    withoutEmbedding: total - withEmbedding,
-  };
-}
-
-/**
- * Ensure embedding column exists
- */
-export async function ensureEmbeddingColumn(): Promise<void> {
-  try {
-    await query(`
-      ALTER TABLE chunks ADD COLUMN IF NOT EXISTS embedding JSONB
-    `);
-    console.log('✅ Embedding column ensured');
-  } catch (error) {
-    // Column might already exist, which is fine
-    console.log('ℹ️  Embedding column check completed');
   }
 }
 
