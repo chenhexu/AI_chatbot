@@ -16,17 +16,29 @@ function getOpenAIClient(): OpenAI {
 }
 
 /**
- * Translate English query to French using Google Translate (free, fast, ~100ms)
+ * Translate English query to French using Google Translate
+ * Has a 2-second timeout and catches ALL errors
  */
 async function translateToFrench(text: string): Promise<string> {
-  try {
-    // Dynamic import to avoid bundling issues
+  // Create a promise that rejects after timeout
+  const timeoutPromise = new Promise<string>((_, reject) => {
+    setTimeout(() => reject(new Error('Translation timeout')), 2000);
+  });
+  
+  // Create the translation promise
+  const translationPromise = (async () => {
     const { translate } = await import('@vitalets/google-translate-api');
     const result = await translate(text, { to: 'fr' });
     return result.text;
+  })();
+  
+  try {
+    // Race between translation and timeout
+    return await Promise.race([translationPromise, timeoutPromise]);
   } catch (error) {
-    console.warn('Google Translate failed:', error);
-    return text; // Return original on failure
+    // Log but don't crash - return original text
+    console.warn('⚠️ Translation skipped:', error instanceof Error ? error.message : 'Unknown error');
+    return text;
   }
 }
 
@@ -58,17 +70,19 @@ export async function generateChatResponse(
   const model = process.env.OPENAI_MODEL || 'gpt-5-nano';
   
   // Translate to French for RAG search if query is in English
+  // This is optional - if it fails, we continue with the original query
   let searchQuery = userMessage;
-  if (containsEnglish(userMessage)) {
-    try {
+  try {
+    if (containsEnglish(userMessage)) {
       const translated = await translateToFrench(userMessage);
-      if (translated !== userMessage) {
-        console.log(`${logPrefix} 🌐 Google Translate: "${userMessage}" -> "${translated}"`);
+      if (translated && translated !== userMessage) {
+        console.log(`${logPrefix} 🌐 Translated: "${userMessage}" -> "${translated}"`);
         searchQuery = translated;
       }
-    } catch (error) {
-      console.warn('Translation failed, using original:', error);
     }
+  } catch (error) {
+    // Never crash on translation - just use original
+    console.warn(`${logPrefix} ⚠️ Translation error (continuing with original):`, error);
   }
   
   // Find relevant chunks using (translated) query
