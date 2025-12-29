@@ -752,6 +752,10 @@ export function findRelevantChunks(
   query: string,
   maxChunks: number = 5  // Increased from 3 to 5 for better coverage
 ): TextChunk[] {
+  // Log the search query (may be expanded with French keywords)
+  const queryWords = query.toLowerCase().replace(/[^\w\sàâäéèêëïîôùûüç-]/g, ' ').split(/\s+/).filter(w => w.length > 2);
+  console.log(`🔎 RAG search with ${queryWords.length} keywords: ${queryWords.slice(0, 15).join(', ')}${queryWords.length > 15 ? '...' : ''}`);
+  
   // Calculate similarity scores
   const scoredChunks = chunks.map(chunk => ({
     chunk,
@@ -760,6 +764,9 @@ export function findRelevantChunks(
   
   // Sort by score (descending)
   scoredChunks.sort((a, b) => b.score - a.score);
+  
+  // Log top 3 scores for debugging
+  console.log(`📊 Top scores: ${scoredChunks.slice(0, 3).map(s => s.score.toFixed(3)).join(', ')}`);
   
   // Return top chunks - be more lenient with the threshold
   // If no chunks have score > 0, return top chunks anyway (might have very low scores)

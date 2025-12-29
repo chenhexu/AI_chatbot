@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { findRelevantChunks, buildContextString, type TextChunk } from './rag';
+import { expandQuery } from './queryExpander';
 
 // Initialize OpenAI client
 let openaiClient: OpenAI | null = null;
@@ -15,68 +16,6 @@ function getOpenAIClient(): OpenAI {
   return openaiClient;
 }
 
-// Translation cache to avoid rate limits
-const translationCache = new Map<string, string>();
-
-/**
- * Translate English query to French using MyMemory API (free, reliable, no rate limits for low volume)
- */
-async function translateToFrench(text: string): Promise<string> {
-  const cacheKey = text.toLowerCase().trim();
-  
-  // Check cache first
-  if (translationCache.has(cacheKey)) {
-    console.log('📦 Translation from cache');
-    return translationCache.get(cacheKey)!;
-  }
-  
-  try {
-    // MyMemory API - free, no API key needed, 1000 words/day anonymous
-    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|fr`;
-    console.log('🌐 Calling MyMemory API...');
-    
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3000); // 3 second timeout
-    
-    const response = await fetch(url, { signal: controller.signal });
-    clearTimeout(timeout);
-    
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    
-    const data = await response.json();
-    console.log('🌐 MyMemory response:', JSON.stringify(data).substring(0, 200));
-    
-    if (data.responseStatus === 200 && data.responseData?.translatedText) {
-      const translated = data.responseData.translatedText;
-      // Cache the result
-      translationCache.set(cacheKey, translated);
-      console.log(`✅ Translation success: "${text}" -> "${translated}"`);
-      return translated;
-    }
-    
-    throw new Error(data.responseDetails || 'Translation failed');
-  } catch (error) {
-    console.warn('⚠️ Translation failed:', error instanceof Error ? error.message : 'Unknown error');
-    return text; // Return original on failure
-  }
-}
-
-/**
- * Check if text contains English words
- */
-function containsEnglish(text: string): boolean {
-  const englishWords = ['the', 'is', 'are', 'who', 'what', 'where', 'when', 'why', 'how', 
-    'can', 'will', 'would', 'could', 'should', 'do', 'does', 'did', 'have', 'has',
-    'school', 'open', 'teacher', 'student', 'principal', 'director'];
-  const textLower = text.toLowerCase();
-  return englishWords.some(word => {
-    const regex = new RegExp(`\\b${word}\\b`);
-    return regex.test(textLower);
-  });
-}
-
 /**
  * Generate chat response using OpenAI with RAG context
  */
@@ -90,23 +29,21 @@ export async function generateChatResponse(
   // Try gpt-5-nano first, fallback to gpt-4o-mini if not available
   const model = process.env.OPENAI_MODEL || 'gpt-5-nano';
   
-  // Translate to French for RAG search if query is in English
-  // This is optional - if it fails, we continue with the original query
+  // Expand query using Gemini Flash for better RAG matching
+  // This translates, expands synonyms, and generates French keywords
   let searchQuery = userMessage;
   try {
-    if (containsEnglish(userMessage)) {
-      const translated = await translateToFrench(userMessage);
-      if (translated && translated !== userMessage) {
-        console.log(`${logPrefix} 🌐 Translated: "${userMessage}" -> "${translated}"`);
-        searchQuery = translated;
-      }
+    const expanded = await expandQuery(userMessage);
+    if (expanded && expanded !== userMessage) {
+      console.log(`${logPrefix} 🧠 Expanded query for RAG search`);
+      searchQuery = expanded;
     }
   } catch (error) {
-    // Never crash on translation - just use original
-    console.warn(`${logPrefix} ⚠️ Translation error (continuing with original):`, error);
+    // Never crash on expansion - just use original
+    console.warn(`${logPrefix} ⚠️ Query expansion error (continuing with original):`, error);
   }
   
-  // Find relevant chunks using (translated) query
+  // Find relevant chunks using expanded query
   const uniqueChunks = findRelevantChunks(documentChunks, searchQuery, 6);
   const context = buildContextString(uniqueChunks);
   
