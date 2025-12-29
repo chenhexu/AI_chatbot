@@ -139,42 +139,26 @@ ${truncatedContext || (isEnglish ? 'No specific context available. Please inform
   const userPrompt = userMessage;
 
   try {
-    // If model is gpt-5-nano and it fails, fallback to gpt-4o-mini
-    let actualModel = model;
-    try {
-      const response = await client.chat.completions.create({
-        model: actualModel,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        temperature: 0.7,
-        max_tokens: 500,
-      });
+    // Use gpt-4o-mini directly - it's fast and reliable
+    const actualModel = 'gpt-4o-mini';
+    console.log(`${logPrefix} 🤖 Calling OpenAI ${actualModel}...`);
+    const openaiStart = Date.now();
+    
+    const response = await client.chat.completions.create({
+      model: actualModel,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      temperature: 0.7,
+      max_tokens: 500,
+    });
 
-      const answer = response.choices[0]?.message?.content || defaultErrorMessage;
-      
-      return answer;
-    } catch (modelError: any) {
-      // If gpt-5-nano doesn't exist, fallback to gpt-4o-mini
-      if (actualModel === 'gpt-5-nano' && (modelError?.message?.includes('model') || modelError?.code === 'model_not_found')) {
-        console.warn('⚠️  gpt-5-nano not available, falling back to gpt-4o-mini');
-        actualModel = 'gpt-4o-mini';
-        const response = await client.chat.completions.create({
-          model: actualModel,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
-          ],
-          temperature: 0.7,
-          max_tokens: 500,
-        });
-
-        const answer = response.choices[0]?.message?.content || defaultErrorMessage;
-        return answer;
-      }
-      throw modelError;
-    }
+    const openaiDuration = Date.now() - openaiStart;
+    console.log(`${logPrefix} ✅ OpenAI response (${openaiDuration}ms)`);
+    
+    const answer = response.choices[0]?.message?.content || defaultErrorMessage;
+    return answer;
   } catch (error) {
     console.error('OpenAI API error:', error);
     throw new Error(

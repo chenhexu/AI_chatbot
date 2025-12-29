@@ -46,6 +46,7 @@ Output: horaire école ouvert ouverte heures fermeture calendrier jour semaine h
 /**
  * Expand a user query into French keywords using Gemini Flash
  * Returns both original query + expanded keywords for broader matching
+ * Has a 5-second timeout to prevent blocking
  */
 export async function expandQuery(query: string): Promise<string> {
   const cacheKey = query.toLowerCase().trim();
@@ -63,13 +64,21 @@ export async function expandQuery(query: string): Promise<string> {
     const client = getGeminiClient();
     const model = client.getGenerativeModel({ model: 'gemini-1.5-flash' });
     
-    const result = await model.generateContent({
+    // Create promise with timeout
+    const expansionPromise = model.generateContent({
       contents: [{ role: 'user', parts: [{ text: `${EXPANSION_PROMPT}\n\nInput: "${query}"\nOutput:` }] }],
       generationConfig: {
         maxOutputTokens: 100,
         temperature: 0.3, // Low temperature for consistent output
       },
     });
+    
+    // 5 second timeout
+    const timeoutPromise = new Promise<never>((_, reject) => 
+      setTimeout(() => reject(new Error('Gemini timeout after 5s')), 5000)
+    );
+    
+    const result = await Promise.race([expansionPromise, timeoutPromise]);
     
     const expanded = result.response.text().trim();
     const duration = Date.now() - startTime;
