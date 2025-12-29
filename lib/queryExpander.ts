@@ -73,9 +73,9 @@ export async function expandQuery(query: string): Promise<string> {
       },
     });
     
-    // 5 second timeout
+    // 30 second timeout (server has limited CPU)
     const timeoutPromise = new Promise<never>((_, reject) => 
-      setTimeout(() => reject(new Error('Gemini timeout after 5s')), 5000)
+      setTimeout(() => reject(new Error('Gemini timeout after 30s')), 30000)
     );
     
     const result = await Promise.race([expansionPromise, timeoutPromise]);
