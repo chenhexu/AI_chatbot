@@ -265,16 +265,16 @@ export default function MigratePage() {
                     <div key={chunk.id} className="bg-white rounded p-2 text-xs border border-teal-100">
                       <div className="flex justify-between items-start mb-1">
                         <span className="font-semibold text-teal-800">
-                          #{i + 1}: {chunk.sizeFormatted}
+                          #{i + 1}: {chunk.size.toLocaleString()} characters
                         </span>
                         <span className="text-teal-500">
                           Doc #{chunk.documentId}, Chunk #{chunk.chunkIndex}
                         </span>
                       </div>
-                      <p className="text-gray-500 truncate" title={chunk.sourceId}>
-                        Source: {chunk.sourceId.substring(0, 60)}...
+                      <p className="text-gray-600 break-all whitespace-normal">
+                        <span className="text-gray-500">Source:</span> {chunk.sourceId}
                       </p>
-                      <p className="text-gray-400 mt-1 truncate">
+                      <p className="text-gray-400 mt-1 break-words whitespace-normal">
                         {chunk.preview}
                       </p>
                     </div>
