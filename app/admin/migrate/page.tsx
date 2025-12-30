@@ -9,6 +9,8 @@ export default function MigratePage() {
   const [dedupeStatus, setDedupeStatus] = useState<'idle' | 'checking' | 'removing' | 'success' | 'error'>('idle');
   const [dedupeMessage, setDedupeMessage] = useState<string>('');
   const [duplicateCount, setDuplicateCount] = useState<number | null>(null);
+  const [clearStatus, setClearStatus] = useState<'idle' | 'clearing' | 'success' | 'error'>('idle');
+  const [clearMessage, setClearMessage] = useState<string>('');
 
   const checkStatus = async () => {
     try {
@@ -70,6 +72,35 @@ export default function MigratePage() {
     } catch (error) {
       setDedupeStatus('error');
       setDedupeMessage(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  const clearDatabase = async () => {
+    if (!confirm('⚠️ This will DELETE ALL documents and chunks from the database. Are you sure?')) {
+      return;
+    }
+    
+    setClearStatus('clearing');
+    setClearMessage('Clearing database...');
+
+    try {
+      const response = await fetch('/api/clear-database', {
+        method: 'POST',
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.status === 'success') {
+        setClearStatus('success');
+        setClearMessage(data.message);
+        setStats({ documents: 0, chunks: 0 });
+      } else {
+        setClearStatus('error');
+        setClearMessage(data.error || 'Failed to clear database');
+      }
+    } catch (error) {
+      setClearStatus('error');
+      setClearMessage(`Error: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
 
@@ -185,6 +216,32 @@ export default function MigratePage() {
                 )}
               </div>
             )}
+
+            {/* Clear Database */}
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-red-800">Clear Database</p>
+                  <p className="text-xs text-red-600">Delete all documents and chunks</p>
+                </div>
+                <button
+                  onClick={clearDatabase}
+                  disabled={clearStatus === 'clearing'}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                >
+                  {clearStatus === 'clearing' ? 'Clearing...' : '🗑️ Clear Database'}
+                </button>
+              </div>
+              {clearMessage && (
+                <p className={`text-sm mt-2 ${
+                  clearStatus === 'success' ? 'text-green-700' :
+                  clearStatus === 'error' ? 'text-red-700' :
+                  'text-red-600'
+                }`}>
+                  {clearMessage}
+                </p>
+              )}
+            </div>
 
             {/* Migration Buttons */}
             <div className="flex gap-2 pt-4 border-t">
