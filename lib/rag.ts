@@ -732,21 +732,44 @@ export function findRelevantChunks(
   query: string,
   maxChunks: number = 5  // Increased from 3 to 5 for better coverage
 ): TextChunk[] {
-  // Log the search query (may be expanded with French keywords)
-  const queryWords = query.toLowerCase().replace(/[^\w\sàâäéèêëïîôùûüç-]/g, ' ').split(/\s+/).filter(w => w.length > 2);
-  console.log(`🔎 RAG search with ${queryWords.length} keywords: ${queryWords.slice(0, 15).join(', ')}${queryWords.length > 15 ? '...' : ''}`);
+  const ragStartTime = Date.now();
   
-  // Calculate similarity scores
-  const scoredChunks = chunks.map(chunk => ({
-    chunk,
-    score: calculateSimilarity(query, chunk.text, chunk.source),
-  }));
+  // Log the search query (may be expanded with French keywords)
+  // Filter out common stop words including "the", "does", etc.
+  const stopWords = new Set(['the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+    'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should',
+    'le', 'la', 'les', 'de', 'du', 'des', 'un', 'une', 'et', 'ou', 'qui', 'que']);
+  const queryWords = query.toLowerCase()
+    .replace(/[^\w\sàâäéèêëïîôùûüç-]/g, ' ')
+    .split(/\s+/)
+    .filter(w => w.length > 2 && !stopWords.has(w));
+  console.log(`🔎 RAG search with ${queryWords.length} keywords: ${queryWords.slice(0, 15).join(', ')}${queryWords.length > 15 ? '...' : ''}`);
+  console.log(`⏱️ [RAG] Starting similarity calculation for ${chunks.length} chunks...`);
+  
+  // Calculate similarity scores with progress logging
+  let processedCount = 0;
+  const logInterval = Math.max(100, Math.floor(chunks.length / 5)); // Log every 20% or every 100 chunks
+  
+  const scoredChunks = chunks.map((chunk, index) => {
+    const score = calculateSimilarity(query, chunk.text, chunk.source);
+    processedCount++;
+    if (processedCount % logInterval === 0) {
+      console.log(`⏱️ [RAG] Processed ${processedCount}/${chunks.length} chunks (${Math.round(processedCount/chunks.length*100)}%)...`);
+    }
+    return { chunk, score };
+  });
+  
+  const scoringTime = Date.now() - ragStartTime;
+  console.log(`⏱️ [RAG] Similarity scoring took ${scoringTime}ms`);
   
   // Sort by score (descending)
+  const sortStartTime = Date.now();
   scoredChunks.sort((a, b) => b.score - a.score);
+  console.log(`⏱️ [RAG] Sorting took ${Date.now() - sortStartTime}ms`);
   
   // Log top 3 scores for debugging
   console.log(`📊 Top scores: ${scoredChunks.slice(0, 3).map(s => s.score.toFixed(3)).join(', ')}`);
+  console.log(`⏱️ [RAG] Total findRelevantChunks time: ${Date.now() - ragStartTime}ms`);
   
   // Return top chunks - be more lenient with the threshold
   // If no chunks have score > 0, return top chunks anyway (might have very low scores)

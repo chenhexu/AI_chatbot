@@ -29,8 +29,12 @@ export async function generateChatResponse(
   // Try gpt-5-nano first, fallback to gpt-4o-mini if not available
   const model = process.env.OPENAI_MODEL || 'gpt-5-nano';
   
+  const totalStartTime = Date.now();
+  
   // Expand query using Gemini Flash for better RAG matching
   // This translates, expands synonyms, and generates French keywords
+  console.log(`${logPrefix} ⏱️ [STEP 1] Starting query expansion...`);
+  const expansionStartTime = Date.now();
   let searchQuery = userMessage;
   try {
     const expanded = await expandQuery(userMessage);
@@ -42,10 +46,18 @@ export async function generateChatResponse(
     // Never crash on expansion - just use original
     console.warn(`${logPrefix} ⚠️ Query expansion error (continuing with original):`, error);
   }
+  console.log(`${logPrefix} ⏱️ [STEP 1] Query expansion took ${Date.now() - expansionStartTime}ms`);
   
   // Find relevant chunks using expanded query
+  console.log(`${logPrefix} ⏱️ [STEP 2] Starting RAG chunk search...`);
+  const ragStartTime = Date.now();
   const uniqueChunks = findRelevantChunks(documentChunks, searchQuery, 6);
+  console.log(`${logPrefix} ⏱️ [STEP 2] RAG search took ${Date.now() - ragStartTime}ms`);
+  
+  console.log(`${logPrefix} ⏱️ [STEP 3] Building context string...`);
+  const contextStartTime = Date.now();
   const context = buildContextString(uniqueChunks);
+  console.log(`${logPrefix} ⏱️ [STEP 3] Context building took ${Date.now() - contextStartTime}ms`);
   
   // Limit context size to avoid token limit errors
   // Rough estimate: 1 token ≈ 4 characters, so 400K tokens ≈ 1.6M characters
@@ -143,7 +155,7 @@ ${truncatedContext || (isEnglish ? 'No specific context available. Please inform
   try {
     // Use gpt-4o-mini directly - it's fast and reliable
     const actualModel = 'gpt-4o-mini';
-    console.log(`${logPrefix} 🤖 Calling OpenAI ${actualModel}...`);
+    console.log(`${logPrefix} ⏱️ [STEP 4] Calling OpenAI ${actualModel}...`);
     const openaiStart = Date.now();
     
     const response = await client.chat.completions.create({
@@ -157,7 +169,8 @@ ${truncatedContext || (isEnglish ? 'No specific context available. Please inform
     });
 
     const openaiDuration = Date.now() - openaiStart;
-    console.log(`${logPrefix} ✅ OpenAI response (${openaiDuration}ms)`);
+    console.log(`${logPrefix} ⏱️ [STEP 4] OpenAI response took ${openaiDuration}ms`);
+    console.log(`${logPrefix} ⏱️ [TOTAL] Full request took ${Date.now() - totalStartTime}ms`);
     
     const answer = response.choices[0]?.message?.content || defaultErrorMessage;
     return answer;
