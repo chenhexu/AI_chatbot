@@ -73,8 +73,8 @@ export async function generateChatResponse(
 ): Promise<string> {
   const logPrefix = requestId ? `[${requestId}]` : '';
   const client = getOpenAIClient();
-  // Try gpt-5-nano first, fallback to gpt-4o-mini if not available
-  const model = process.env.OPENAI_MODEL || 'gpt-5-nano';
+  // Use gpt-4o-mini as the default model (fast and cheap)
+  const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
   
   // Translate query to French for better document matching
   let translatedQuery: string;
@@ -200,42 +200,20 @@ ${truncatedContext || (isEnglish ? 'No specific context available. Please inform
   const userPrompt = userMessage;
 
   try {
-    // If model is gpt-5-nano and it fails, fallback to gpt-4o-mini
-    let actualModel = model;
-    try {
-      const response = await client.chat.completions.create({
-        model: actualModel,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        temperature: 0.7,
-        max_tokens: 500,
-      });
+    console.log(`${logPrefix} 🤖 Calling OpenAI with model: ${model}`);
+    const response = await client.chat.completions.create({
+      model: model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      temperature: 0.7,
+      max_tokens: 500,
+    });
 
-      const answer = response.choices[0]?.message?.content || defaultErrorMessage;
-      
-      return answer;
-    } catch (modelError: any) {
-      // If gpt-5-nano doesn't exist, fallback to gpt-4o-mini
-      if (actualModel === 'gpt-5-nano' && (modelError?.message?.includes('model') || modelError?.code === 'model_not_found')) {
-        console.warn('⚠️  gpt-5-nano not available, falling back to gpt-4o-mini');
-        actualModel = 'gpt-4o-mini';
-        const response = await client.chat.completions.create({
-          model: actualModel,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
-          ],
-          temperature: 0.7,
-          max_tokens: 500,
-        });
-
-        const answer = response.choices[0]?.message?.content || defaultErrorMessage;
-        return answer;
-      }
-      throw modelError;
-    }
+    const answer = response.choices[0]?.message?.content || defaultErrorMessage;
+    console.log(`${logPrefix} ✅ Response received (${answer.length} chars)`);
+    return answer;
   } catch (error) {
     console.error('OpenAI API error:', error);
     throw new Error(
