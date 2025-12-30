@@ -17,25 +17,25 @@ export async function GET() {
     const docCount = await query<{ count: string }>('SELECT COUNT(*) as count FROM documents');
     const chunkCount = await query<{ count: string }>('SELECT COUNT(*) as count FROM chunks');
 
-    // Get biggest 5 chunks by content length
+    // Get biggest 5 chunks by text length
     const biggestChunks = await query<{
       id: number;
       document_id: number;
       chunk_index: number;
-      content_length: number;
-      content_preview: string;
+      text_length: number;
+      text_preview: string;
       source_id: string;
     }>(`
       SELECT 
         c.id,
         c.document_id,
         c.chunk_index,
-        LENGTH(c.content) as content_length,
-        LEFT(c.content, 200) as content_preview,
+        LENGTH(c.text) as text_length,
+        LEFT(c.text, 200) as text_preview,
         d.source_id
       FROM chunks c
       JOIN documents d ON c.document_id = d.id
-      ORDER BY LENGTH(c.content) DESC
+      ORDER BY LENGTH(c.text) DESC
       LIMIT 5
     `);
 
@@ -43,11 +43,11 @@ export async function GET() {
     const sizeDistribution = await query<{ size_range: string; count: string }>(`
       SELECT 
         CASE 
-          WHEN LENGTH(content) < 1000 THEN '< 1KB'
-          WHEN LENGTH(content) < 5000 THEN '1-5KB'
-          WHEN LENGTH(content) < 10000 THEN '5-10KB'
-          WHEN LENGTH(content) < 100000 THEN '10-100KB'
-          WHEN LENGTH(content) < 1000000 THEN '100KB-1MB'
+          WHEN LENGTH(text) < 1000 THEN '< 1KB'
+          WHEN LENGTH(text) < 5000 THEN '1-5KB'
+          WHEN LENGTH(text) < 10000 THEN '5-10KB'
+          WHEN LENGTH(text) < 100000 THEN '10-100KB'
+          WHEN LENGTH(text) < 1000000 THEN '100KB-1MB'
           ELSE '> 1MB'
         END as size_range,
         COUNT(*) as count
@@ -66,7 +66,7 @@ export async function GET() {
 
     // Get average chunk size
     const avgSize = await query<{ avg_size: string }>(`
-      SELECT ROUND(AVG(LENGTH(content))) as avg_size FROM chunks
+      SELECT ROUND(AVG(LENGTH(text))) as avg_size FROM chunks
     `);
 
     return NextResponse.json({
@@ -82,10 +82,10 @@ export async function GET() {
         id: c.id,
         documentId: c.document_id,
         chunkIndex: c.chunk_index,
-        size: c.content_length,
-        sizeFormatted: formatBytes(c.content_length),
+        size: c.text_length,
+        sizeFormatted: formatBytes(c.text_length),
         sourceId: c.source_id,
-        preview: c.content_preview + (c.content_length > 200 ? '...' : ''),
+        preview: c.text_preview + (c.text_length > 200 ? '...' : ''),
       })),
     });
   } catch (error) {
