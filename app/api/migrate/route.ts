@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { initializeDatabase, closeDatabase } from '@/lib/database/client';
 import { loadAllDocuments } from '@/lib/documentLoader';
 import { processDocuments } from '@/lib/rag';
-import { storeDocument, storeChunks, clearAllData, getDocumentCount, getChunkCount } from '@/lib/database/documentStore';
+import { storeDocument, storeChunks, clearAllData, getDocumentCount, getChunkCount, getExistingSourceIds } from '@/lib/database/documentStore';
 
 // PostgreSQL tsvector limit is 1MB (1048575 bytes)
 // Use 400KB to be very safe (allows for encoding overhead and gives room)
@@ -189,26 +189,40 @@ export async function POST(request: NextRequest) {
     await initializeDatabase();
 
     const existingCount = await getDocumentCount();
-    log(`📊 Existing documents: ${existingCount}`);
-    
-    if (existingCount > 0 && !force) {
-      log('⚠️ Database already has data, returning early');
-      return NextResponse.json({
-        status: 'already_migrated',
-        documents: existingCount,
-        chunks: await getChunkCount(),
-        message: 'Database already contains data. Use force=true to re-migrate.'
-      });
-    }
+    log(`📊 Existing documents in database: ${existingCount}`);
 
     if (existingCount > 0 && force) {
-      log(`⚠️  Clearing existing ${existingCount} documents...`);
+      log(`⚠️  Force mode: Clearing existing ${existingCount} documents...`);
       await clearAllData();
+      log('✅ Database cleared');
     }
 
     log('📂 Loading documents from filesystem...');
-    const documents = await loadAllDocuments();
-    log(`✅ Loaded ${documents.length} documents from filesystem`);
+    const allDocuments = await loadAllDocuments();
+    log(`✅ Loaded ${allDocuments.length} documents from filesystem`);
+
+    // Filter to only new documents if not forcing
+    let documents = allDocuments;
+    if (existingCount > 0 && !force) {
+      log('🔍 Checking which documents are already in database...');
+      const existingSourceIds = await getExistingSourceIds();
+      log(`📊 Found ${existingSourceIds.size} existing source IDs in database`);
+      
+      documents = allDocuments.filter(doc => !existingSourceIds.has(doc.id));
+      const skippedCount = allDocuments.length - documents.length;
+      
+      if (documents.length === 0) {
+        log('✅ All documents already in database, nothing to migrate');
+        return NextResponse.json({
+          status: 'already_migrated',
+          documents: existingCount,
+          chunks: await getChunkCount(),
+          message: `All ${allDocuments.length} documents are already in the database. Use force=true to re-migrate.`
+        });
+      }
+      
+      log(`📊 Processing ${documents.length} new documents (skipping ${skippedCount} existing)`);
+    }
 
     if (documents.length === 0) {
       return NextResponse.json({
@@ -346,11 +360,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const finalDocCount = await getDocumentCount();
+    const finalChunkCount = await getChunkCount();
+    
     await closeDatabase();
 
     log(`\n✅ Migration complete!`);
-    log(`   📊 Documents: ${storedDocs}/${documents.length}`);
-    log(`   📊 Chunks: ${storedChunks}`);
+    log(`   📊 New documents stored: ${storedDocs}/${documents.length}`);
+    log(`   📊 New chunks stored: ${storedChunks}`);
+    log(`   📊 Total documents in database: ${finalDocCount}`);
+    log(`   📊 Total chunks in database: ${finalChunkCount}`);
     if (skippedFiles.length > 0) {
       log(`   ❌ Skipped documents: ${skippedFiles.length}`);
       skippedFiles.forEach(f => log(`      - ${f.file}: ${f.reason}`));
@@ -366,10 +385,12 @@ export async function POST(request: NextRequest) {
       status: 'success',
       documents: storedDocs,
       chunks: storedChunks,
+      totalDocuments: finalDocCount,
+      totalChunks: finalChunkCount,
       skippedDocuments: skippedFiles,
       skippedChunks: skippedChunks.length,
       splitChunks: splitFiles.length,
-      message: `Migrated ${storedDocs} documents and ${storedChunks} chunks.` +
+      message: `Migrated ${storedDocs} new document(s) and ${storedChunks} chunk(s). Total: ${finalDocCount} documents, ${finalChunkCount} chunks.` +
         (skippedFiles.length > 0 ? ` Skipped ${skippedFiles.length} documents.` : '') +
         (skippedChunks.length > 0 ? ` Skipped ${skippedChunks.length} chunks.` : '')
     });

@@ -116,6 +116,14 @@ export async function getDocumentCount(): Promise<number> {
 }
 
 /**
+ * Get all existing source IDs from database
+ */
+export async function getExistingSourceIds(): Promise<Set<string>> {
+  const result = await query<{ source_id: string }>('SELECT source_id FROM documents');
+  return new Set(result.rows.map(row => row.source_id));
+}
+
+/**
  * Get chunk count
  */
 export async function getChunkCount(): Promise<number> {
