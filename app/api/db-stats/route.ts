@@ -41,19 +41,24 @@ export async function GET() {
 
     // Get chunk size distribution
     const sizeDistribution = await query<{ size_range: string; count: string }>(`
-      SELECT 
-        CASE 
-          WHEN LENGTH(text) < 1000 THEN '< 1KB'
-          WHEN LENGTH(text) < 5000 THEN '1-5KB'
-          WHEN LENGTH(text) < 10000 THEN '5-10KB'
-          WHEN LENGTH(text) < 100000 THEN '10-100KB'
-          WHEN LENGTH(text) < 1000000 THEN '100KB-1MB'
-          ELSE '> 1MB'
-        END as size_range,
-        COUNT(*) as count
-      FROM chunks
+      WITH sized AS (
+        SELECT
+          CASE
+            WHEN LENGTH(text) < 1000 THEN '< 1KB'
+            WHEN LENGTH(text) < 5000 THEN '1-5KB'
+            WHEN LENGTH(text) < 10000 THEN '5-10KB'
+            WHEN LENGTH(text) < 100000 THEN '10-100KB'
+            WHEN LENGTH(text) < 1000000 THEN '100KB-1MB'
+            ELSE '> 1MB'
+          END AS size_range
+        FROM chunks
+      )
+      SELECT
+        size_range,
+        COUNT(*) AS count
+      FROM sized
       GROUP BY size_range
-      ORDER BY 
+      ORDER BY
         CASE size_range
           WHEN '< 1KB' THEN 1
           WHEN '1-5KB' THEN 2
