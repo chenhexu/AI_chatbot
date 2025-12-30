@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 
 interface BigChunk {
   id: number;
@@ -177,7 +178,15 @@ export default function MigratePage() {
     <main className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-8">
       <div className="max-w-3xl mx-auto">
         <div className="bg-white rounded-2xl shadow-xl p-8">
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Database Management</h1>
+          <div className="flex items-center justify-between mb-2">
+            <h1 className="text-3xl font-bold text-gray-800">Database Management</h1>
+            <Link 
+              href="/admin/upload"
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm"
+            >
+              📤 Go to Upload
+            </Link>
+          </div>
           <p className="text-gray-600 mb-6">
             Manage documents and chunks in PostgreSQL database
           </p>

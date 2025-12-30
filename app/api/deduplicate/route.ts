@@ -17,33 +17,21 @@ export async function POST(request: NextRequest) {
 
     console.log('🔍 Starting deduplication...');
 
-    // Find duplicates by source_id (should be unique)
-    const duplicatesResult = await query<{ source_id: string; count: string; ids: string }>(
+    let totalRemoved = 0;
+
+    // First, find duplicates by source_id (shouldn't exist due to UNIQUE constraint, but check anyway)
+    const sourceIdDuplicates = await query<{ source_id: string; count: string; ids: string }>(
       `SELECT source_id, COUNT(*) as count, array_agg(id::text) as ids
        FROM documents
        GROUP BY source_id
        HAVING COUNT(*) > 1`
     );
 
-    if (duplicatesResult.rows.length === 0) {
-      return NextResponse.json({
-        status: 'no_duplicates',
-        message: 'No duplicate documents found',
-        removed: 0,
-      });
-    }
-
-    let totalRemoved = 0;
-    const duplicateGroups = duplicatesResult.rows;
-
-    for (const group of duplicateGroups) {
-      const ids = group.ids.split(',').map(id => parseInt(id.trim(), 10));
-      // Keep the first one (oldest), remove the rest
+    for (const group of sourceIdDuplicates.rows) {
+      const ids = group.ids.replace(/[{}]/g, '').split(',').map(id => parseInt(id.trim(), 10));
       const idsToRemove = ids.slice(1);
-
       console.log(`📋 Found ${ids.length} copies of ${group.source_id}, removing ${idsToRemove.length}...`);
 
-      // Delete chunks for documents we're removing
       for (const docId of idsToRemove) {
         await query('DELETE FROM chunks WHERE document_id = $1', [docId]);
         await query('DELETE FROM documents WHERE id = $1', [docId]);
@@ -51,7 +39,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Also check for duplicates by content hash (in case source_id differs but content is same)
+    // Then check for content duplicates (same content, different source_id)
     console.log('🔍 Checking for content duplicates...');
     const allDocs = await query<{ id: number; source_id: string; content: string }>(
       'SELECT id, source_id, content FROM documents ORDER BY id'
@@ -69,7 +57,6 @@ export async function POST(request: NextRequest) {
     let contentDuplicatesRemoved = 0;
     for (const [hash, ids] of contentHashes.entries()) {
       if (ids.length > 1) {
-        // Keep the first one, remove the rest
         const idsToRemove = ids.slice(1);
         console.log(`📋 Found ${ids.length} documents with same content (hash: ${hash.substring(0, 8)}...), removing ${idsToRemove.length}...`);
 
@@ -89,15 +76,17 @@ export async function POST(request: NextRequest) {
     console.log(`✅ Deduplication complete! Removed ${totalRemoved} duplicate documents`);
 
     return NextResponse.json({
-      status: 'success',
+      status: totalRemoved > 0 ? 'success' : 'no_duplicates',
       removed: totalRemoved,
-      sourceIdDuplicates: duplicateGroups.length,
+      sourceIdDuplicates: sourceIdDuplicates.rows.length,
       contentDuplicates: contentDuplicatesRemoved,
       remaining: {
         documents: parseInt(finalDocCount.rows[0].count, 10),
         chunks: parseInt(finalChunkCount.rows[0].count, 10),
       },
-      message: `Removed ${totalRemoved} duplicate document(s). ${finalDocCount.rows[0].count} unique documents remain.`,
+      message: totalRemoved > 0
+        ? `Removed ${totalRemoved} duplicate document(s). ${finalDocCount.rows[0].count} unique documents remain.`
+        : 'No duplicate documents found.',
     });
 
   } catch (error) {
@@ -133,7 +122,7 @@ export async function GET() {
     // Track which document IDs are duplicates
     const duplicateIds = new Set<number>();
 
-    // Check for source_id duplicates
+    // Check for source_id duplicates (shouldn't exist due to UNIQUE, but check anyway)
     const sourceIdGroups = new Map<string, number[]>();
     for (const doc of allDocs.rows) {
       if (!sourceIdGroups.has(doc.source_id)) {
@@ -146,15 +135,14 @@ export async function GET() {
     for (const [_, ids] of sourceIdGroups) {
       if (ids.length > 1) {
         sourceIdDuplicateGroups++;
-        // Mark all but the first as duplicates
         ids.slice(1).forEach(id => duplicateIds.add(id));
       }
     }
 
-    // Check for content hash duplicates (only among non-already-marked docs)
+    // Check for content hash duplicates
     const contentHashes = new Map<string, number[]>();
     for (const doc of allDocs.rows) {
-      // Skip if already marked as duplicate by source_id
+      // Skip if already marked as duplicate
       if (duplicateIds.has(doc.id)) continue;
       
       const hash = crypto.createHash('md5').update(doc.content).digest('hex');
@@ -168,7 +156,6 @@ export async function GET() {
     for (const [_, ids] of contentHashes) {
       if (ids.length > 1) {
         contentDuplicateGroups++;
-        // Mark all but the first as duplicates
         ids.slice(1).forEach(id => duplicateIds.add(id));
       }
     }
@@ -192,4 +179,3 @@ export async function GET() {
     );
   }
 }
-
