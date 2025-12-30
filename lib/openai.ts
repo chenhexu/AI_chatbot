@@ -50,7 +50,9 @@ export async function generateChatResponse(
   // Limit context size to avoid token limit errors
   // Rough estimate: 1 token ≈ 4 characters, so 400K tokens ≈ 1.6M characters
   // Leave room for prompt and response, so limit context to ~1M characters
-  const MAX_CONTEXT_LENGTH = 1000000; // ~250K tokens
+  // gpt-4o-mini has 128K token limit, leave room for system prompt + response
+  // ~50K characters = ~12K tokens for context
+  const MAX_CONTEXT_LENGTH = 50000;
   const truncatedContext = context.length > MAX_CONTEXT_LENGTH 
     ? context.substring(0, MAX_CONTEXT_LENGTH) + '\n\n[Context truncated due to size limit...]'
     : context;

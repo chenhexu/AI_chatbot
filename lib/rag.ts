@@ -815,8 +815,8 @@ export function buildContextString(chunks: TextChunk[]): string {
     return '';
   }
   
-  // Limit each chunk to ~300K characters (~75K tokens) to stay within limits
-  const MAX_CHUNK_LENGTH = 300000;
+  // Limit each chunk to ~8K characters (~2K tokens) - with 6 chunks = ~12K tokens total
+  const MAX_CHUNK_LENGTH = 8000;
   
   // Collect unique PDF URLs
   const pdfUrls = new Set<string>();
