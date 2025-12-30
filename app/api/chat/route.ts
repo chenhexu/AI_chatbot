@@ -138,7 +138,7 @@ export async function POST(request: NextRequest) {
   
   try {
     const body = await request.json();
-    const { message } = body;
+    const { message, provider = 'openai' } = body;
 
     if (!message || typeof message !== 'string') {
       return NextResponse.json(
@@ -147,16 +147,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(`[${requestId}] 📨 Received query: "${message}"`);
+    console.log(`[${requestId}] 📨 Received query: "${message}" (provider: ${provider})`);
 
     // Get document chunks (includes scraped data from data/scraped/)
     const chunks = await getDocumentChunks();
     console.log(`[${requestId}] 🔍 Processing query with ${chunks.length} total chunks available`);
 
-    // Generate response using OpenAI with RAG
-    const response = await generateChatResponse(message, chunks, requestId);
+    // Generate response using selected AI provider with RAG
+    const response = await generateChatResponse(message, chunks, requestId, provider);
 
-    return NextResponse.json({ response });
+    return NextResponse.json({ response, provider });
   } catch (error) {
     console.error('Chat API error:', error);
     return NextResponse.json(

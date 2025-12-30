@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { findRelevantChunks, buildContextString, type TextChunk } from './rag';
 
 // Initialize OpenAI client
@@ -13,6 +14,20 @@ function getOpenAIClient(): OpenAI {
     openaiClient = new OpenAI({ apiKey });
   }
   return openaiClient;
+}
+
+// Initialize Gemini client
+let geminiClient: GoogleGenerativeAI | null = null;
+
+function getGeminiClient(): GoogleGenerativeAI {
+  if (!geminiClient) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error('GEMINI_API_KEY environment variable is not set');
+    }
+    geminiClient = new GoogleGenerativeAI(apiKey);
+  }
+  return geminiClient;
 }
 
 /**
@@ -64,14 +79,21 @@ export async function translateQueryToFrench(query: string, client: OpenAI): Pro
 }
 
 /**
- * Generate chat response using OpenAI with RAG context
+ * Generate chat response using OpenAI or Gemini with RAG context
  */
 export async function generateChatResponse(
   userMessage: string,
   documentChunks: TextChunk[],
-  requestId?: string
+  requestId?: string,
+  provider: 'openai' | 'gemini' = 'openai'
 ): Promise<string> {
   const logPrefix = requestId ? `[${requestId}]` : '';
+  
+  // Use Gemini if specified
+  if (provider === 'gemini') {
+    return generateGeminiChatResponse(userMessage, documentChunks, requestId);
+  }
+  
   const client = getOpenAIClient();
   // Use gpt-4o-mini as the default model (fast and cheap)
   const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
@@ -218,6 +240,70 @@ ${truncatedContext || (isEnglish ? 'No specific context available. Please inform
     console.error('OpenAI API error:', error);
     throw new Error(
       `Failed to generate response: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
+  }
+}
+
+/**
+ * Generate chat response using Google Gemini with RAG context
+ */
+async function generateGeminiChatResponse(
+  userMessage: string,
+  documentChunks: TextChunk[],
+  requestId?: string
+): Promise<string> {
+  const logPrefix = requestId ? `[${requestId}]` : '';
+  const client = getGeminiClient();
+  const model = client.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  
+  // Find relevant chunks using both original and translated query
+  const relevantChunks = findRelevantChunks(documentChunks, userMessage, 6);
+  const context = buildContextString(relevantChunks);
+  
+  // Limit context size
+  const MAX_CONTEXT_LENGTH = 500000;
+  const truncatedContext = context.length > MAX_CONTEXT_LENGTH 
+    ? context.substring(0, MAX_CONTEXT_LENGTH) + '\n\n[Context truncated...]'
+    : context;
+  
+  console.log(`${logPrefix} Query: "${userMessage}" - Found ${relevantChunks.length} relevant chunks (Gemini)`);
+  
+  // Detect language
+  const isEnglish = /\b(the|is|are|who|what|where|when|why|how|can|will)\b/i.test(userMessage);
+  
+  const errorMessage = isEnglish 
+    ? "I cannot answer this question with the information I have."
+    : "Je ne peux pas répondre à cette question avec les informations dont je dispose.";
+  
+  const languageInstruction = isEnglish 
+    ? 'Respond in ENGLISH only.'
+    : 'Répondez en FRANÇAIS uniquement.';
+  
+  const prompt = `You are a helpful AI assistant for Collège Saint-Louis, a French secondary school in Quebec, Canada.
+
+RULES:
+- Answer based on the context information below
+- If information is not in context, say: "${errorMessage}"
+- ${languageInstruction}
+- Be helpful, friendly, and professional
+
+Context information:
+${truncatedContext || 'No context available.'}
+
+User question: ${userMessage}
+
+Answer:`;
+
+  try {
+    console.log(`${logPrefix} 🤖 Calling Gemini (gemini-1.5-flash)`);
+    const result = await model.generateContent(prompt);
+    const answer = result.response.text();
+    console.log(`${logPrefix} ✅ Gemini response received (${answer.length} chars)`);
+    return answer;
+  } catch (error) {
+    console.error('Gemini API error:', error);
+    throw new Error(
+      `Failed to generate Gemini response: ${error instanceof Error ? error.message : 'Unknown error'}`
     );
   }
 }

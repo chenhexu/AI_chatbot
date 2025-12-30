@@ -22,6 +22,7 @@ export default function ChatInterface() {
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isPreloading, setIsPreloading] = useState(true);
+  const [aiProvider, setAiProvider] = useState<'openai' | 'gemini'>('openai');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -69,7 +70,7 @@ export default function ChatInterface() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ message: userMessage.text }),
+        body: JSON.stringify({ message: userMessage.text, provider: aiProvider }),
       });
 
       if (!response.ok) {
@@ -124,13 +125,27 @@ export default function ChatInterface() {
     <div className="flex flex-col h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       {/* Header */}
       <header className="bg-white shadow-sm border-b border-gray-200 px-6 py-4">
-        <div className="max-w-4xl mx-auto">
-          <h1 className="text-2xl font-bold text-gray-800">
-            Collège Saint-Louis
-          </h1>
-          <p className="text-sm text-gray-600 mt-1">
-            Assistant IA - Une fenêtre ouverte sur le monde
-          </p>
+        <div className="max-w-4xl mx-auto flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-800">
+              Collège Saint-Louis
+            </h1>
+            <p className="text-sm text-gray-600 mt-1">
+              Assistant IA - Une fenêtre ouverte sur le monde
+            </p>
+          </div>
+          {/* AI Provider Selector */}
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-gray-500">AI:</label>
+            <select
+              value={aiProvider}
+              onChange={(e) => setAiProvider(e.target.value as 'openai' | 'gemini')}
+              className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="openai">OpenAI (gpt-4o-mini)</option>
+              <option value="gemini">Google Gemini</option>
+            </select>
+          </div>
         </div>
       </header>
 
