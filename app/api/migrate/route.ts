@@ -10,6 +10,20 @@ const MAX_CHUNK_BYTES = 400 * 1024; // 400KB in bytes
 const MAX_DOCUMENT_BYTES = 400 * 1024; // 400KB for document content
 
 /**
+ * Remove null bytes and other invalid UTF-8 sequences
+ * PostgreSQL doesn't allow null bytes (0x00) in text fields
+ */
+function sanitizeText(text: string): string {
+  // Remove null bytes (0x00)
+  let sanitized = text.replace(/\0/g, '');
+  
+  // Remove other control characters that might cause issues (except newlines, tabs, carriage returns)
+  sanitized = sanitized.replace(/[\x01-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+  
+  return sanitized;
+}
+
+/**
  * Format size with both bytes/KB/MB and character count
  */
 function formatSize(text: string): string {
@@ -227,15 +241,22 @@ export async function POST(request: NextRequest) {
       
       log(`📄 [${i + 1}/${documents.length}] Processing: ${docName.substring(0, 60)}...`);
       
-      const docContentBytes = Buffer.byteLength(doc.content, 'utf8');
-      const docContentChars = doc.content.length;
+      // Sanitize document content (remove null bytes and invalid UTF-8)
+      let sanitizedContent = sanitizeText(doc.content);
+      const hadNullBytes = sanitizedContent.length !== doc.content.length;
+      if (hadNullBytes) {
+        log(`   🧹 Removed null bytes from document`);
+      }
+      
+      const docContentBytes = Buffer.byteLength(sanitizedContent, 'utf8');
+      const docContentChars = sanitizedContent.length;
       
       // Truncate document content if too large
-      let documentContent = doc.content;
+      let documentContent = sanitizedContent;
       if (docContentBytes > MAX_DOCUMENT_BYTES) {
-        log(`   ⚠️  Document too large (${formatSize(doc.content)}), truncating...`);
+        log(`   ⚠️  Document too large (${formatSize(sanitizedContent)}), truncating...`);
         // Find a safe truncation point
-        const pieces = splitLargeText(doc.content, MAX_DOCUMENT_BYTES - 200);
+        const pieces = splitLargeText(sanitizedContent, MAX_DOCUMENT_BYTES - 200);
         documentContent = pieces[0] + '\n\n[Content truncated - see chunks for full text]';
       }
       
@@ -254,11 +275,13 @@ export async function POST(request: NextRequest) {
         let chunkIndex = 0;
         
         for (const chunk of docChunks) {
-          const chunkBytes = Buffer.byteLength(chunk.text, 'utf8');
+          // Sanitize chunk text (remove null bytes)
+          const sanitizedChunkText = sanitizeText(chunk.text);
+          const chunkBytes = Buffer.byteLength(sanitizedChunkText, 'utf8');
           
           if (chunkBytes > MAX_CHUNK_BYTES) {
-            log(`   🔪 Splitting large chunk (${formatSize(chunk.text)})...`);
-            const pieces = splitLargeText(chunk.text, MAX_CHUNK_BYTES);
+            log(`   🔪 Splitting large chunk (${formatSize(sanitizedChunkText)})...`);
+            const pieces = splitLargeText(sanitizedChunkText, MAX_CHUNK_BYTES);
             
             let validPieces = 0;
             for (const piece of pieces) {
@@ -284,13 +307,13 @@ export async function POST(request: NextRequest) {
             if (validPieces > 0) {
               splitFiles.push({
                 file: docName,
-                originalSize: formatSize(chunk.text),
+                originalSize: formatSize(sanitizedChunkText),
                 newChunks: validPieces,
               });
             }
           } else {
             processedChunks.push({
-              text: chunk.text,
+              text: sanitizedChunkText,
               index: chunkIndex++,
               source: chunk.source,
               pdfUrl: chunk.pdfUrl,
