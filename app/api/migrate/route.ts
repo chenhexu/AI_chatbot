@@ -98,7 +98,7 @@ function splitLargeText(text: string, maxBytes: number): string[] {
     
     if (splitPoint === 0) {
       // Edge case: even one character is too big (shouldn't happen)
-      console.log(`   ⚠️  Cannot split further, skipping remaining ${formatSize(remaining)}`);
+      log(`   ⚠️  Cannot split further, skipping remaining ${formatSize(remaining)}`);
       break;
     }
     
@@ -144,13 +144,21 @@ export async function GET() {
   }
 }
 
+// Force console output to flush immediately in production
+function log(...args: unknown[]) {
+  console.log(new Date().toISOString(), ...args);
+}
+
 export async function POST(request: NextRequest) {
   const skippedFiles: { file: string; reason: string; size: number; chars: number }[] = [];
   const skippedChunks: { file: string; size: number; chars: number }[] = [];
   const splitFiles: { file: string; originalSize: string; newChunks: number }[] = [];
   
+  log('📥 Migration POST request received');
+  
   try {
     if (!process.env.DATABASE_URL) {
+      log('❌ DATABASE_URL not set');
       return NextResponse.json(
         { error: 'DATABASE_URL not set', status: 'not_configured' },
         { status: 400 }
@@ -160,14 +168,17 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     const force = body.force === true;
 
-    console.log('🚀 Starting migration to database...');
-    console.log(`📊 Max chunk size: ${(MAX_CHUNK_BYTES / 1024).toFixed(0)}KB`);
+    log('🚀 Starting migration to database...');
+    log(`📊 Max chunk size: ${(MAX_CHUNK_BYTES / 1024).toFixed(0)}KB`);
 
+    log('📋 Initializing database schema...');
     await initializeDatabase();
 
     const existingCount = await getDocumentCount();
+    log(`📊 Existing documents: ${existingCount}`);
     
     if (existingCount > 0 && !force) {
+      log('⚠️ Database already has data, returning early');
       return NextResponse.json({
         status: 'already_migrated',
         documents: existingCount,
@@ -177,13 +188,13 @@ export async function POST(request: NextRequest) {
     }
 
     if (existingCount > 0 && force) {
-      console.log(`⚠️  Clearing existing ${existingCount} documents...`);
+      log(`⚠️  Clearing existing ${existingCount} documents...`);
       await clearAllData();
     }
 
-    console.log('📂 Loading documents from filesystem...');
+    log('📂 Loading documents from filesystem...');
     const documents = await loadAllDocuments();
-    console.log(`✅ Loaded ${documents.length} documents from filesystem`);
+    log(`✅ Loaded ${documents.length} documents from filesystem`);
 
     if (documents.length === 0) {
       return NextResponse.json({
@@ -192,11 +203,11 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    console.log('🔪 Processing documents into chunks...');
+    log('🔪 Processing documents into chunks...');
     const chunks = processDocuments(documents);
-    console.log(`✅ Created ${chunks.length} chunks`);
+    log(`✅ Created ${chunks.length} chunks`);
 
-    console.log('💾 Storing in database...');
+    log('💾 Storing in database...');
     let storedDocs = 0;
     let storedChunks = 0;
 
@@ -214,7 +225,7 @@ export async function POST(request: NextRequest) {
       const doc = documents[i];
       const docName = doc.id.split('/').pop() || doc.id;
       
-      console.log(`📄 [${i + 1}/${documents.length}] Processing: ${docName.substring(0, 60)}...`);
+      log(`📄 [${i + 1}/${documents.length}] Processing: ${docName.substring(0, 60)}...`);
       
       const docContentBytes = Buffer.byteLength(doc.content, 'utf8');
       const docContentChars = doc.content.length;
@@ -222,7 +233,7 @@ export async function POST(request: NextRequest) {
       // Truncate document content if too large
       let documentContent = doc.content;
       if (docContentBytes > MAX_DOCUMENT_BYTES) {
-        console.log(`   ⚠️  Document too large (${formatSize(doc.content)}), truncating...`);
+        log(`   ⚠️  Document too large (${formatSize(doc.content)}), truncating...`);
         // Find a safe truncation point
         const pieces = splitLargeText(doc.content, MAX_DOCUMENT_BYTES - 200);
         documentContent = pieces[0] + '\n\n[Content truncated - see chunks for full text]';
@@ -246,14 +257,14 @@ export async function POST(request: NextRequest) {
           const chunkBytes = Buffer.byteLength(chunk.text, 'utf8');
           
           if (chunkBytes > MAX_CHUNK_BYTES) {
-            console.log(`   🔪 Splitting large chunk (${formatSize(chunk.text)})...`);
+            log(`   🔪 Splitting large chunk (${formatSize(chunk.text)})...`);
             const pieces = splitLargeText(chunk.text, MAX_CHUNK_BYTES);
             
             let validPieces = 0;
             for (const piece of pieces) {
               const pieceBytes = Buffer.byteLength(piece, 'utf8');
               if (pieceBytes > MAX_CHUNK_BYTES) {
-                console.log(`   ⚠️  Piece still too large (${formatSize(piece)}), skipping...`);
+                log(`   ⚠️  Piece still too large (${formatSize(piece)}), skipping...`);
                 skippedChunks.push({
                   file: docName,
                   size: pieceBytes,
@@ -295,12 +306,12 @@ export async function POST(request: NextRequest) {
         storedDocs++;
         
         if (storedDocs % 50 === 0) {
-          console.log(`   📊 Progress: ${storedDocs}/${documents.length} documents, ${storedChunks} chunks`);
+          log(`   📊 Progress: ${storedDocs}/${documents.length} documents, ${storedChunks} chunks`);
         }
         
       } catch (docError) {
         const errorMsg = docError instanceof Error ? docError.message : String(docError);
-        console.error(`   ❌ Failed to store document: ${errorMsg}`);
+        log(`   ❌ Failed to store document: ${errorMsg}`);
         
         skippedFiles.push({
           file: docName,
@@ -314,18 +325,18 @@ export async function POST(request: NextRequest) {
 
     await closeDatabase();
 
-    console.log(`\n✅ Migration complete!`);
-    console.log(`   📊 Documents: ${storedDocs}/${documents.length}`);
-    console.log(`   📊 Chunks: ${storedChunks}`);
+    log(`\n✅ Migration complete!`);
+    log(`   📊 Documents: ${storedDocs}/${documents.length}`);
+    log(`   📊 Chunks: ${storedChunks}`);
     if (skippedFiles.length > 0) {
-      console.log(`   ❌ Skipped documents: ${skippedFiles.length}`);
-      skippedFiles.forEach(f => console.log(`      - ${f.file}: ${f.reason}`));
+      log(`   ❌ Skipped documents: ${skippedFiles.length}`);
+      skippedFiles.forEach(f => log(`      - ${f.file}: ${f.reason}`));
     }
     if (skippedChunks.length > 0) {
-      console.log(`   ⚠️  Skipped chunks: ${skippedChunks.length}`);
+      log(`   ⚠️  Skipped chunks: ${skippedChunks.length}`);
     }
     if (splitFiles.length > 0) {
-      console.log(`   🔪 Split large chunks: ${splitFiles.length}`);
+      log(`   🔪 Split large chunks: ${splitFiles.length}`);
     }
 
     return NextResponse.json({
@@ -341,7 +352,7 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('❌ Migration failed:', error);
+    log('❌ Migration failed:', error);
     await closeDatabase().catch(() => {});
     
     return NextResponse.json(
