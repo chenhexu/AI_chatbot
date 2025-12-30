@@ -167,6 +167,20 @@ export function chunkText(text: string, chunkSize: number = 1500, overlap: numbe
  * Improved to give much higher scores to chunks with actual relevant content
  */
 export function calculateSimilarity(query: string, text: string, source?: string): number {
+  // OPTIMIZATION: Skip chunks that are too large (should have been chunked properly)
+  // These monster chunks (>50K chars) take 10+ seconds each to process
+  if (text.length > 50000) {
+    // Just do simple keyword check for huge chunks
+    const queryLower = query.toLowerCase();
+    const textLower = text.substring(0, 10000).toLowerCase(); // Only check first 10K chars
+    const keywords = queryLower.split(/\s+/).filter(w => w.length > 3);
+    let matches = 0;
+    for (const word of keywords) {
+      if (textLower.includes(word)) matches++;
+    }
+    return keywords.length > 0 ? (matches / keywords.length) * 0.5 : 0; // Cap at 0.5
+  }
+  
   const queryLower = query.toLowerCase();
   const textLower = text.toLowerCase();
   
