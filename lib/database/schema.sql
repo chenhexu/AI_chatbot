@@ -31,7 +31,10 @@ CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON chunks(document_id);
 CREATE INDEX IF NOT EXISTS idx_documents_source_type ON documents(source_type);
 CREATE INDEX IF NOT EXISTS idx_documents_source_id ON documents(source_id);
 
--- Full-text search index (PostgreSQL)
+-- Full-text search index (PostgreSQL) - only on chunks, not documents
+-- Documents can be >1MB which exceeds tsvector limit (1048575 bytes)
 CREATE INDEX IF NOT EXISTS idx_chunks_text_search ON chunks USING gin(to_tsvector('french', text));
-CREATE INDEX IF NOT EXISTS idx_documents_content_search ON documents USING gin(to_tsvector('french', content));
+
+-- Drop the documents content search index if it exists (too large for tsvector)
+DROP INDEX IF EXISTS idx_documents_content_search;
 
