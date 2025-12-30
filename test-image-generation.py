@@ -1,14 +1,9 @@
 from google import genai
-from PIL import Image
 
+# The client gets the API key from the environment variable `GEMINI_API_KEY`.
 client = genai.Client()
 
 response = client.models.generate_content(
-    model="gemini-2.5-flash-image",
-    contents="Create a picture of a futuristic banana with neon lights in a cyberpunk city.",
+    model="gemini-2.5-flash", contents="Explain how AI works in a few words"
 )
-
-for part in response.parts:
-    if part.inline_data:
-        image = part.as_image()
-        image.show()
+print(response.text)

@@ -748,13 +748,24 @@ export function findRelevantChunks(
   
   // Calculate similarity scores with progress logging
   let processedCount = 0;
-  const logInterval = Math.max(100, Math.floor(chunks.length / 5)); // Log every 20% or every 100 chunks
+  const logInterval = Math.max(50, Math.floor(chunks.length / 10)); // Log every 10%
+  let lastLogTime = Date.now();
   
   const scoredChunks = chunks.map((chunk, index) => {
+    const chunkStart = Date.now();
     const score = calculateSimilarity(query, chunk.text, chunk.source);
+    const chunkTime = Date.now() - chunkStart;
+    
+    // Log if a single chunk takes more than 500ms
+    if (chunkTime > 500) {
+      console.log(`⚠️ [RAG] SLOW CHUNK #${index}: ${chunkTime}ms - source: ${chunk.source.substring(0, 60)}... (${chunk.text.length} chars)`);
+    }
+    
     processedCount++;
     if (processedCount % logInterval === 0) {
-      console.log(`⏱️ [RAG] Processed ${processedCount}/${chunks.length} chunks (${Math.round(processedCount/chunks.length*100)}%)...`);
+      const elapsed = Date.now() - lastLogTime;
+      console.log(`⏱️ [RAG] Processed ${processedCount}/${chunks.length} chunks (${Math.round(processedCount/chunks.length*100)}%) - last batch took ${elapsed}ms`);
+      lastLogTime = Date.now();
     }
     return { chunk, score };
   });
