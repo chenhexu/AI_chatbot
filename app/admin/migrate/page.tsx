@@ -21,6 +21,12 @@ interface DbStats {
   biggestChunks: BigChunk[];
 }
 
+interface SkippedFile {
+  file: string;
+  reason: string;
+  size: number;
+}
+
 export default function MigratePage() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState<string>('');
@@ -32,6 +38,7 @@ export default function MigratePage() {
   const [clearMessage, setClearMessage] = useState<string>('');
   const [dbStats, setDbStats] = useState<DbStats | null>(null);
   const [showBigChunks, setShowBigChunks] = useState(false);
+  const [skippedFiles, setSkippedFiles] = useState<SkippedFile[]>([]);
 
   const checkStatus = async () => {
     try {
@@ -143,7 +150,8 @@ export default function MigratePage() {
 
   const runMigration = async (force: boolean = false) => {
     setStatus('loading');
-    setMessage('Starting migration...');
+    setMessage('Starting migration... (check Render logs for progress)');
+    setSkippedFiles([]);
 
     try {
       const response = await fetch('/api/migrate', {
@@ -160,6 +168,9 @@ export default function MigratePage() {
         setStatus('success');
         setStats({ documents: data.documents, chunks: data.chunks });
         setMessage(data.message);
+        if (data.skipped && data.skipped.length > 0) {
+          setSkippedFiles(data.skipped);
+        }
       } else if (data.status === 'already_migrated') {
         setStatus('idle');
         setStats({ documents: data.documents, chunks: data.chunks });
@@ -167,6 +178,9 @@ export default function MigratePage() {
       } else {
         setStatus('error');
         setMessage(data.error || data.message || 'Migration failed');
+        if (data.skipped && data.skipped.length > 0) {
+          setSkippedFiles(data.skipped);
+        }
       }
     } catch (error) {
       setStatus('error');
@@ -277,10 +291,33 @@ export default function MigratePage() {
                     ? 'bg-green-50 text-green-800'
                     : status === 'error'
                     ? 'bg-red-50 text-red-800'
+                    : status === 'loading'
+                    ? 'bg-yellow-50 text-yellow-800'
                     : 'bg-blue-50 text-blue-800'
                 }`}
               >
+                {status === 'loading' && <span className="animate-pulse">⏳ </span>}
                 {message}
+              </div>
+            )}
+
+            {/* Skipped Files Display */}
+            {skippedFiles.length > 0 && (
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                <p className="text-sm font-semibold text-orange-800 mb-2">
+                  ⚠️ Skipped {skippedFiles.length} file(s) due to size:
+                </p>
+                <div className="space-y-1 max-h-40 overflow-y-auto">
+                  {skippedFiles.map((f, i) => (
+                    <div key={i} className="text-xs bg-white rounded p-2 border border-orange-100">
+                      <span className="font-medium text-orange-700">{f.file.substring(0, 50)}...</span>
+                      <span className="text-orange-500 ml-2">
+                        ({(f.size / 1024 / 1024).toFixed(2)} MB)
+                      </span>
+                      <p className="text-orange-400 truncate">{f.reason}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
