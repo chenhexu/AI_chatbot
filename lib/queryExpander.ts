@@ -62,7 +62,7 @@ export async function expandQuery(query: string): Promise<string> {
     const startTime = Date.now();
     
     const client = getGeminiClient();
-    const model = client.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model = client.getGenerativeModel({ model: 'gemini-2.5-flash' });
     
     // Create promise with timeout
     const expansionPromise = model.generateContent({
