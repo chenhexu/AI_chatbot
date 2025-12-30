@@ -745,37 +745,138 @@ function calculateSimilarityInternal(query: string, text: string): number {
 }
 
 /**
+ * Check if query matches appear near the start or end of a chunk
+ * Returns: 'start' | 'end' | 'both' | 'middle' | 'none'
+ */
+function findMatchPosition(query: string, text: string): 'start' | 'end' | 'both' | 'middle' | 'none' {
+  const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+  if (queryWords.length === 0) return 'none';
+  
+  const textLower = text.toLowerCase();
+  const boundaryPercent = 0.15; // 15% of chunk length
+  const boundaryChars = Math.max(200, Math.floor(text.length * boundaryPercent));
+  
+  const startSection = textLower.substring(0, boundaryChars);
+  const endSection = textLower.substring(Math.max(0, text.length - boundaryChars));
+  const middleSection = textLower.substring(boundaryChars, Math.max(boundaryChars, text.length - boundaryChars));
+  
+  // Count matches in each section
+  let startMatches = 0;
+  let endMatches = 0;
+  let middleMatches = 0;
+  
+  for (const word of queryWords) {
+    if (startSection.includes(word)) startMatches++;
+    if (endSection.includes(word)) endMatches++;
+    if (middleSection.includes(word)) middleMatches++;
+  }
+  
+  const threshold = Math.max(1, Math.floor(queryWords.length * 0.3)); // 30% of query words
+  
+  const hasStartMatch = startMatches >= threshold;
+  const hasEndMatch = endMatches >= threshold;
+  const hasMiddleMatch = middleMatches >= threshold;
+  
+  if (hasStartMatch && hasEndMatch) return 'both';
+  if (hasStartMatch && !hasMiddleMatch) return 'start';
+  if (hasEndMatch && !hasMiddleMatch) return 'end';
+  if (hasMiddleMatch) return 'middle';
+  return 'none';
+}
+
+/**
  * Find most relevant chunks for a query
+ * Includes neighboring chunks when matches are at boundaries to preserve context
  */
 export function findRelevantChunks(
   chunks: TextChunk[],
   query: string,
-  maxChunks: number = 5  // Increased from 3 to 5 for better coverage
+  maxChunks: number = 5
 ): TextChunk[] {
   // Calculate similarity scores
-  const scoredChunks = chunks.map(chunk => ({
+  const scoredChunks = chunks.map((chunk, originalIndex) => ({
     chunk,
+    originalIndex,
     score: calculateSimilarity(query, chunk.text, chunk.source),
   }));
   
   // Sort by score (descending)
   scoredChunks.sort((a, b) => b.score - a.score);
   
-  // Return top chunks - be more lenient with the threshold
-  // If no chunks have score > 0, return top chunks anyway (might have very low scores)
-  const relevantChunks = scoredChunks
+  // Get top scoring chunks
+  const topChunks = scoredChunks
     .slice(0, maxChunks)
-    .filter(item => item.score > 0 || scoredChunks.length <= maxChunks);
+    .filter(item => item.score > 0);
   
-  // If we have some chunks with scores, return them
-  if (relevantChunks.length > 0) {
-    return relevantChunks.map(item => item.chunk);
+  if (topChunks.length === 0) {
+    // Fallback: return top chunks even with low scores
+    return scoredChunks
+      .slice(0, Math.min(3, chunks.length))
+      .map(item => item.chunk);
   }
   
-  // Fallback: return top chunks even with low scores if nothing matched
-  return scoredChunks
-    .slice(0, Math.min(3, chunks.length))
-    .map(item => item.chunk);
+  // Build index of chunks by source and index for neighbor lookup
+  const chunkIndex = new Map<string, TextChunk[]>();
+  for (const chunk of chunks) {
+    if (!chunkIndex.has(chunk.source)) {
+      chunkIndex.set(chunk.source, []);
+    }
+    chunkIndex.get(chunk.source)![chunk.index] = chunk;
+  }
+  
+  // Collect result chunks, including neighbors when needed
+  const resultChunks: TextChunk[] = [];
+  const addedChunkKeys = new Set<string>();
+  
+  for (const { chunk } of topChunks) {
+    const chunkKey = `${chunk.source}:${chunk.index}`;
+    if (addedChunkKeys.has(chunkKey)) continue;
+    
+    // Check if match is at boundary
+    const matchPosition = findMatchPosition(query, chunk.text);
+    const sourceChunks = chunkIndex.get(chunk.source) || [];
+    
+    // Add previous chunk if match is at start
+    if ((matchPosition === 'start' || matchPosition === 'both') && chunk.index > 0) {
+      const prevChunk = sourceChunks[chunk.index - 1];
+      if (prevChunk) {
+        const prevKey = `${prevChunk.source}:${prevChunk.index}`;
+        if (!addedChunkKeys.has(prevKey)) {
+          resultChunks.push(prevChunk);
+          addedChunkKeys.add(prevKey);
+        }
+      }
+    }
+    
+    // Add the main chunk
+    if (!addedChunkKeys.has(chunkKey)) {
+      resultChunks.push(chunk);
+      addedChunkKeys.add(chunkKey);
+    }
+    
+    // Add next chunk if match is at end
+    if ((matchPosition === 'end' || matchPosition === 'both') && chunk.index < sourceChunks.length - 1) {
+      const nextChunk = sourceChunks[chunk.index + 1];
+      if (nextChunk) {
+        const nextKey = `${nextChunk.source}:${nextChunk.index}`;
+        if (!addedChunkKeys.has(nextKey)) {
+          resultChunks.push(nextChunk);
+          addedChunkKeys.add(nextKey);
+        }
+      }
+    }
+    
+    // Don't add too many chunks (limit to maxChunks + 3 for context)
+    if (resultChunks.length >= maxChunks + 3) break;
+  }
+  
+  // Sort by source and index to maintain reading order
+  resultChunks.sort((a, b) => {
+    if (a.source !== b.source) return a.source.localeCompare(b.source);
+    return a.index - b.index;
+  });
+  
+  return resultChunks;
 }
 
 /**

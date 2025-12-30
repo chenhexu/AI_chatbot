@@ -25,6 +25,13 @@ interface SkippedFile {
   file: string;
   reason: string;
   size: number;
+  chars?: number;
+}
+
+interface MigrationResult {
+  skippedDocuments: SkippedFile[];
+  skippedChunks: number;
+  splitChunks: number;
 }
 
 export default function MigratePage() {
@@ -39,6 +46,8 @@ export default function MigratePage() {
   const [dbStats, setDbStats] = useState<DbStats | null>(null);
   const [showBigChunks, setShowBigChunks] = useState(false);
   const [skippedFiles, setSkippedFiles] = useState<SkippedFile[]>([]);
+  const [skippedChunksCount, setSkippedChunksCount] = useState<number>(0);
+  const [splitChunksCount, setSplitChunksCount] = useState<number>(0);
 
   const checkStatus = async () => {
     try {
@@ -152,6 +161,8 @@ export default function MigratePage() {
     setStatus('loading');
     setMessage('Starting migration... (check Render logs for progress)');
     setSkippedFiles([]);
+    setSkippedChunksCount(0);
+    setSplitChunksCount(0);
 
     try {
       const response = await fetch('/api/migrate', {
@@ -168,8 +179,14 @@ export default function MigratePage() {
         setStatus('success');
         setStats({ documents: data.documents, chunks: data.chunks });
         setMessage(data.message);
-        if (data.skipped && data.skipped.length > 0) {
-          setSkippedFiles(data.skipped);
+        if (data.skippedDocuments && data.skippedDocuments.length > 0) {
+          setSkippedFiles(data.skippedDocuments);
+        }
+        if (data.skippedChunks) {
+          setSkippedChunksCount(data.skippedChunks);
+        }
+        if (data.splitChunks) {
+          setSplitChunksCount(data.splitChunks);
         }
       } else if (data.status === 'already_migrated') {
         setStatus('idle');
@@ -178,8 +195,11 @@ export default function MigratePage() {
       } else {
         setStatus('error');
         setMessage(data.error || data.message || 'Migration failed');
-        if (data.skipped && data.skipped.length > 0) {
-          setSkippedFiles(data.skipped);
+        if (data.skippedDocuments && data.skippedDocuments.length > 0) {
+          setSkippedFiles(data.skippedDocuments);
+        }
+        if (data.skippedChunks) {
+          setSkippedChunksCount(data.skippedChunks);
         }
       }
     } catch (error) {
@@ -301,23 +321,47 @@ export default function MigratePage() {
               </div>
             )}
 
-            {/* Skipped Files Display */}
-            {skippedFiles.length > 0 && (
+            {/* Migration Stats Display */}
+            {(skippedFiles.length > 0 || skippedChunksCount > 0 || splitChunksCount > 0) && (
               <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
                 <p className="text-sm font-semibold text-orange-800 mb-2">
-                  ⚠️ Skipped {skippedFiles.length} file(s) due to size:
+                  📊 Migration Details:
                 </p>
-                <div className="space-y-1 max-h-40 overflow-y-auto">
-                  {skippedFiles.map((f, i) => (
-                    <div key={i} className="text-xs bg-white rounded p-2 border border-orange-100">
-                      <span className="font-medium text-orange-700">{f.file.substring(0, 50)}...</span>
-                      <span className="text-orange-500 ml-2">
-                        ({(f.size / 1024 / 1024).toFixed(2)} MB)
-                      </span>
-                      <p className="text-orange-400 truncate">{f.reason}</p>
-                    </div>
-                  ))}
+                
+                {/* Summary stats */}
+                <div className="flex flex-wrap gap-2 mb-2 text-xs">
+                  {splitChunksCount > 0 && (
+                    <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                      🔪 Split {splitChunksCount} large chunks
+                    </span>
+                  )}
+                  {skippedChunksCount > 0 && (
+                    <span className="bg-yellow-100 text-yellow-700 px-2 py-1 rounded">
+                      ⚠️ Skipped {skippedChunksCount} chunks (too large)
+                    </span>
+                  )}
+                  {skippedFiles.length > 0 && (
+                    <span className="bg-red-100 text-red-700 px-2 py-1 rounded">
+                      ❌ Failed {skippedFiles.length} documents
+                    </span>
+                  )}
                 </div>
+                
+                {/* Failed documents list */}
+                {skippedFiles.length > 0 && (
+                  <div className="space-y-1 max-h-40 overflow-y-auto mt-2">
+                    <p className="text-xs font-medium text-orange-600">Failed documents:</p>
+                    {skippedFiles.map((f, i) => (
+                      <div key={i} className="text-xs bg-white rounded p-2 border border-orange-100">
+                        <span className="font-medium text-orange-700 break-all">{f.file}</span>
+                        <span className="text-orange-500 ml-2">
+                          ({(f.size / 1024 / 1024).toFixed(2)} MB{f.chars ? ` / ${f.chars.toLocaleString()} chars` : ''})
+                        </span>
+                        <p className="text-orange-400 truncate">{f.reason}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 

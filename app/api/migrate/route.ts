@@ -5,15 +5,28 @@ import { processDocuments } from '@/lib/rag';
 import { storeDocument, storeChunks, clearAllData, getDocumentCount, getChunkCount } from '@/lib/database/documentStore';
 
 // PostgreSQL tsvector limit is 1MB (1048575 bytes)
-// We use 900KB as safe limit to account for encoding overhead
-const MAX_CHUNK_SIZE = 900 * 1024; // 900KB
-const MAX_DOCUMENT_SIZE = 900 * 1024; // 900KB for document content
+// Use 400KB to be very safe (allows for encoding overhead and gives room)
+const MAX_CHUNK_BYTES = 400 * 1024; // 400KB in bytes
+const MAX_DOCUMENT_BYTES = 400 * 1024; // 400KB for document content
 
 /**
- * Split text into smaller pieces if needed
+ * Format size with both bytes/KB/MB and character count
  */
-function splitLargeText(text: string, maxSize: number): string[] {
-  if (text.length <= maxSize) {
+function formatSize(text: string): string {
+  const bytes = Buffer.byteLength(text, 'utf8');
+  const chars = text.length;
+  if (bytes < 1024) return `${bytes}B / ${chars} chars`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB / ${chars.toLocaleString()} chars`;
+  return `${(bytes / 1024 / 1024).toFixed(2)}MB / ${chars.toLocaleString()} chars`;
+}
+
+/**
+ * Split text into smaller pieces based on BYTE size (not character count)
+ * This is important because PostgreSQL tsvector limit is in bytes
+ */
+function splitLargeText(text: string, maxBytes: number): string[] {
+  const textBytes = Buffer.byteLength(text, 'utf8');
+  if (textBytes <= maxBytes) {
     return [text];
   }
   
@@ -21,21 +34,72 @@ function splitLargeText(text: string, maxSize: number): string[] {
   let remaining = text;
   
   while (remaining.length > 0) {
-    if (remaining.length <= maxSize) {
+    const remainingBytes = Buffer.byteLength(remaining, 'utf8');
+    if (remainingBytes <= maxBytes) {
       pieces.push(remaining);
       break;
     }
     
-    // Try to split at a paragraph or sentence boundary
-    let splitPoint = remaining.lastIndexOf('\n\n', maxSize);
-    if (splitPoint < maxSize / 2) {
-      splitPoint = remaining.lastIndexOf('\n', maxSize);
+    // Estimate character count for target byte size
+    // Assume average 2 bytes per char for safety (covers UTF-8 overhead)
+    let estimatedChars = Math.floor(maxBytes / 2);
+    
+    // Find a good split point near our estimate
+    let splitPoint = -1;
+    
+    // Try paragraph boundary first
+    const paragraphEnd = remaining.lastIndexOf('\n\n', estimatedChars);
+    if (paragraphEnd > estimatedChars / 4) {
+      splitPoint = paragraphEnd + 2; // Include the newlines
     }
-    if (splitPoint < maxSize / 2) {
-      splitPoint = remaining.lastIndexOf('. ', maxSize);
+    
+    // Try single newline
+    if (splitPoint < 0) {
+      const lineEnd = remaining.lastIndexOf('\n', estimatedChars);
+      if (lineEnd > estimatedChars / 4) {
+        splitPoint = lineEnd + 1;
+      }
     }
-    if (splitPoint < maxSize / 2) {
-      splitPoint = maxSize; // Force split
+    
+    // Try sentence boundary
+    if (splitPoint < 0) {
+      const sentenceEnd = remaining.lastIndexOf('. ', estimatedChars);
+      if (sentenceEnd > estimatedChars / 4) {
+        splitPoint = sentenceEnd + 2;
+      }
+    }
+    
+    // Force split if no good boundary found
+    if (splitPoint < 0) {
+      splitPoint = estimatedChars;
+    }
+    
+    // Make sure split point doesn't exceed remaining text
+    splitPoint = Math.min(splitPoint, remaining.length);
+    
+    const piece = remaining.substring(0, splitPoint);
+    const pieceBytes = Buffer.byteLength(piece, 'utf8');
+    
+    // If piece is still too big, reduce split point
+    if (pieceBytes > maxBytes) {
+      // Binary search for correct split point
+      let low = 0;
+      let high = splitPoint;
+      while (low < high) {
+        const mid = Math.floor((low + high + 1) / 2);
+        if (Buffer.byteLength(remaining.substring(0, mid), 'utf8') <= maxBytes) {
+          low = mid;
+        } else {
+          high = mid - 1;
+        }
+      }
+      splitPoint = low;
+    }
+    
+    if (splitPoint === 0) {
+      // Edge case: even one character is too big (shouldn't happen)
+      console.log(`   ⚠️  Cannot split further, skipping remaining ${formatSize(remaining)}`);
+      break;
     }
     
     pieces.push(remaining.substring(0, splitPoint));
@@ -47,10 +111,6 @@ function splitLargeText(text: string, maxSize: number): string[] {
 
 /**
  * API endpoint to migrate data from filesystem to database
- * This can be called from the browser since Render free tier doesn't have shell access
- * 
- * GET /api/migrate - Check migration status
- * POST /api/migrate - Run migration
  */
 export async function GET() {
   try {
@@ -85,8 +145,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const skippedFiles: { file: string; reason: string; size: number }[] = [];
-  const splitFiles: { file: string; originalChunks: number; newChunks: number }[] = [];
+  const skippedFiles: { file: string; reason: string; size: number; chars: number }[] = [];
+  const skippedChunks: { file: string; size: number; chars: number }[] = [];
+  const splitFiles: { file: string; originalSize: string; newChunks: number }[] = [];
   
   try {
     if (!process.env.DATABASE_URL) {
@@ -100,13 +161,10 @@ export async function POST(request: NextRequest) {
     const force = body.force === true;
 
     console.log('🚀 Starting migration to database...');
-    console.log(`📊 Max chunk size: ${(MAX_CHUNK_SIZE / 1024).toFixed(0)}KB`);
+    console.log(`📊 Max chunk size: ${(MAX_CHUNK_BYTES / 1024).toFixed(0)}KB`);
 
-    // Initialize database schema
-    console.log('📋 Initializing database schema...');
     await initializeDatabase();
 
-    // Check if database already has data
     const existingCount = await getDocumentCount();
     
     if (existingCount > 0 && !force) {
@@ -123,7 +181,6 @@ export async function POST(request: NextRequest) {
       await clearAllData();
     }
 
-    // Load documents from filesystem
     console.log('📂 Loading documents from filesystem...');
     const documents = await loadAllDocuments();
     console.log(`✅ Loaded ${documents.length} documents from filesystem`);
@@ -135,12 +192,10 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Process documents into chunks
     console.log('🔪 Processing documents into chunks...');
     const chunks = processDocuments(documents);
     console.log(`✅ Created ${chunks.length} chunks`);
 
-    // Store documents and chunks in database
     console.log('💾 Storing in database...');
     let storedDocs = 0;
     let storedChunks = 0;
@@ -159,18 +214,18 @@ export async function POST(request: NextRequest) {
       const doc = documents[i];
       const docName = doc.id.split('/').pop() || doc.id;
       
-      console.log(`📄 [${i + 1}/${documents.length}] Processing: ${docName.substring(0, 50)}...`);
+      console.log(`📄 [${i + 1}/${documents.length}] Processing: ${docName.substring(0, 60)}...`);
       
-      // Check document content size
-      const docContentSize = Buffer.byteLength(doc.content, 'utf8');
+      const docContentBytes = Buffer.byteLength(doc.content, 'utf8');
+      const docContentChars = doc.content.length;
       
-      // Truncate document content if too large (for the documents table)
+      // Truncate document content if too large
       let documentContent = doc.content;
-      if (docContentSize > MAX_DOCUMENT_SIZE) {
-        console.log(`   ⚠️  Document content too large (${(docContentSize / 1024 / 1024).toFixed(2)}MB), truncating for storage...`);
-        // Truncate to fit, keeping a note at the end
-        documentContent = doc.content.substring(0, MAX_DOCUMENT_SIZE - 100) + 
-          '\n\n[Content truncated - full text available in chunks]';
+      if (docContentBytes > MAX_DOCUMENT_BYTES) {
+        console.log(`   ⚠️  Document too large (${formatSize(doc.content)}), truncating...`);
+        // Find a safe truncation point
+        const pieces = splitLargeText(doc.content, MAX_DOCUMENT_BYTES - 200);
+        documentContent = pieces[0] + '\n\n[Content truncated - see chunks for full text]';
       }
       
       try {
@@ -188,17 +243,22 @@ export async function POST(request: NextRequest) {
         let chunkIndex = 0;
         
         for (const chunk of docChunks) {
-          const chunkSize = Buffer.byteLength(chunk.text, 'utf8');
+          const chunkBytes = Buffer.byteLength(chunk.text, 'utf8');
           
-          if (chunkSize > MAX_CHUNK_SIZE) {
-            // Split large chunk
-            console.log(`   🔪 Splitting large chunk (${(chunkSize / 1024).toFixed(0)}KB)...`);
-            const pieces = splitLargeText(chunk.text, MAX_CHUNK_SIZE);
+          if (chunkBytes > MAX_CHUNK_BYTES) {
+            console.log(`   🔪 Splitting large chunk (${formatSize(chunk.text)})...`);
+            const pieces = splitLargeText(chunk.text, MAX_CHUNK_BYTES);
             
+            let validPieces = 0;
             for (const piece of pieces) {
-              const pieceSize = Buffer.byteLength(piece, 'utf8');
-              if (pieceSize > MAX_CHUNK_SIZE) {
-                console.log(`   ⚠️  Chunk piece still too large (${(pieceSize / 1024).toFixed(0)}KB), skipping...`);
+              const pieceBytes = Buffer.byteLength(piece, 'utf8');
+              if (pieceBytes > MAX_CHUNK_BYTES) {
+                console.log(`   ⚠️  Piece still too large (${formatSize(piece)}), skipping...`);
+                skippedChunks.push({
+                  file: docName,
+                  size: pieceBytes,
+                  chars: piece.length,
+                });
                 continue;
               }
               processedChunks.push({
@@ -207,13 +267,16 @@ export async function POST(request: NextRequest) {
                 source: chunk.source,
                 pdfUrl: chunk.pdfUrl,
               });
+              validPieces++;
             }
             
-            splitFiles.push({
-              file: docName,
-              originalChunks: 1,
-              newChunks: pieces.length,
-            });
+            if (validPieces > 0) {
+              splitFiles.push({
+                file: docName,
+                originalSize: formatSize(chunk.text),
+                newChunks: validPieces,
+              });
+            }
           } else {
             processedChunks.push({
               text: chunk.text,
@@ -232,7 +295,7 @@ export async function POST(request: NextRequest) {
         storedDocs++;
         
         if (storedDocs % 50 === 0) {
-          console.log(`   📊 Progress: ${storedDocs}/${documents.length} documents, ${storedChunks} chunks stored`);
+          console.log(`   📊 Progress: ${storedDocs}/${documents.length} documents, ${storedChunks} chunks`);
         }
         
       } catch (docError) {
@@ -242,10 +305,9 @@ export async function POST(request: NextRequest) {
         skippedFiles.push({
           file: docName,
           reason: errorMsg.substring(0, 100),
-          size: docContentSize,
+          size: docContentBytes,
+          chars: docContentChars,
         });
-        
-        // Continue with next document instead of failing entirely
         continue;
       }
     }
@@ -256,22 +318,26 @@ export async function POST(request: NextRequest) {
     console.log(`   📊 Documents: ${storedDocs}/${documents.length}`);
     console.log(`   📊 Chunks: ${storedChunks}`);
     if (skippedFiles.length > 0) {
-      console.log(`   ⚠️  Skipped files: ${skippedFiles.length}`);
-      skippedFiles.forEach(f => console.log(`      - ${f.file} (${(f.size / 1024 / 1024).toFixed(2)}MB): ${f.reason}`));
+      console.log(`   ❌ Skipped documents: ${skippedFiles.length}`);
+      skippedFiles.forEach(f => console.log(`      - ${f.file}: ${f.reason}`));
+    }
+    if (skippedChunks.length > 0) {
+      console.log(`   ⚠️  Skipped chunks: ${skippedChunks.length}`);
     }
     if (splitFiles.length > 0) {
-      console.log(`   🔪 Split files: ${splitFiles.length}`);
+      console.log(`   🔪 Split large chunks: ${splitFiles.length}`);
     }
 
     return NextResponse.json({
       status: 'success',
       documents: storedDocs,
       chunks: storedChunks,
-      skipped: skippedFiles,
-      split: splitFiles,
-      message: skippedFiles.length > 0
-        ? `Migrated ${storedDocs} documents and ${storedChunks} chunks. Skipped ${skippedFiles.length} files due to size.`
-        : `Successfully migrated ${storedDocs} documents and ${storedChunks} chunks to database`
+      skippedDocuments: skippedFiles,
+      skippedChunks: skippedChunks.length,
+      splitChunks: splitFiles.length,
+      message: `Migrated ${storedDocs} documents and ${storedChunks} chunks.` +
+        (skippedFiles.length > 0 ? ` Skipped ${skippedFiles.length} documents.` : '') +
+        (skippedChunks.length > 0 ? ` Skipped ${skippedChunks.length} chunks.` : '')
     });
 
   } catch (error) {
@@ -282,7 +348,8 @@ export async function POST(request: NextRequest) {
       { 
         error: 'Migration failed',
         details: error instanceof Error ? error.message : String(error),
-        skipped: skippedFiles,
+        skippedDocuments: skippedFiles,
+        skippedChunks: skippedChunks.length,
         status: 'error'
       },
       { status: 500 }
