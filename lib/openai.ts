@@ -1,6 +1,5 @@
 import OpenAI from 'openai';
 import { findRelevantChunks, buildContextString, type TextChunk } from './rag';
-import { expandQuery } from './queryExpander';
 
 // Initialize OpenAI client
 let openaiClient: OpenAI | null = null;
@@ -17,6 +16,54 @@ function getOpenAIClient(): OpenAI {
 }
 
 /**
+ * Translate query to French for better matching with French documents
+ * Uses free Google Translate API (no API key needed) or OpenAI if preferred
+ */
+export async function translateQueryToFrench(query: string, client: OpenAI): Promise<string> {
+  try {
+    // Simple heuristic: if query contains common English words, translate it
+    const englishWords = ['the', 'is', 'are', 'who', 'what', 'where', 'when', 'why', 'how', 'can', 'will', 'principal', 'school'];
+    const hasEnglishWords = englishWords.some(word => query.toLowerCase().includes(word));
+    
+    if (!hasEnglishWords) {
+      // Probably already in French or another language
+      return query;
+    }
+    
+    // Skip Google Translate - it's unreliable and slow. Use OpenAI directly for faster, more reliable translation.
+    // Google Translate often times out on Render and adds unnecessary delay.
+    try {
+      const response = await client.chat.completions.create({
+        model: 'gpt-4o-mini', // Use a cheaper model for translation
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a translator. Translate the user\'s question to French. Only return the translation, nothing else.'
+          },
+          {
+            role: 'user',
+            content: query
+          }
+        ],
+        temperature: 0.3,
+        max_tokens: 100,
+      });
+      
+      const translation = response.choices[0]?.message?.content?.trim() || query;
+      console.log(`✅ Translation success: "${query}" -> "${translation}"`);
+      return translation;
+    } catch (openaiError) {
+      console.error('❌ Translation failed:', openaiError instanceof Error ? openaiError.message : String(openaiError));
+      // Return original query if translation fails
+      return query;
+    }
+  } catch (error) {
+    console.warn('Translation failed, using original query:', error);
+    return query;
+  }
+}
+
+/**
  * Generate chat response using OpenAI with RAG context
  */
 export async function generateChatResponse(
@@ -29,42 +76,42 @@ export async function generateChatResponse(
   // Try gpt-5-nano first, fallback to gpt-4o-mini if not available
   const model = process.env.OPENAI_MODEL || 'gpt-5-nano';
   
-  const totalStartTime = Date.now();
-  
-  // Expand query using Gemini Flash for better RAG matching
-  // This translates, expands synonyms, and generates French keywords
-  console.log(`${logPrefix} ⏱️ [STEP 1] Starting query expansion...`);
-  const expansionStartTime = Date.now();
-  let searchQuery = userMessage;
+  // Translate query to French for better document matching
+  let translatedQuery: string;
   try {
-    const expanded = await expandQuery(userMessage);
-    if (expanded && expanded !== userMessage) {
-      console.log(`${logPrefix} 🧠 Expanded query for RAG search`);
-      searchQuery = expanded;
-    }
+    translatedQuery = await translateQueryToFrench(userMessage, client);
+    console.log(`${logPrefix} 🌐 Translation: "${userMessage}" -> "${translatedQuery}"`);
   } catch (error) {
-    // Never crash on expansion - just use original
-    console.warn(`${logPrefix} ⚠️ Query expansion error (continuing with original):`, error);
+    console.error('❌ Translation error:', error);
+    // If translation fails, use original query
+    translatedQuery = userMessage;
+    console.log(`⚠️  Using original query (translation failed): "${userMessage}"`);
   }
-  console.log(`${logPrefix} ⏱️ [STEP 1] Query expansion took ${Date.now() - expansionStartTime}ms`);
   
-  // Find relevant chunks using expanded query
-  console.log(`${logPrefix} ⏱️ [STEP 2] Starting RAG chunk search...`);
-  const ragStartTime = Date.now();
-  const uniqueChunks = findRelevantChunks(documentChunks, searchQuery, 6);
-  console.log(`${logPrefix} ⏱️ [STEP 2] RAG search took ${Date.now() - ragStartTime}ms`);
+  // Use both original and translated query for chunk finding (only if translation changed the query)
+  // This ensures we find relevant chunks regardless of language
+  const useBothQueries = translatedQuery.toLowerCase() !== userMessage.toLowerCase();
+  let uniqueChunks: TextChunk[];
   
-  console.log(`${logPrefix} ⏱️ [STEP 3] Building context string...`);
-  const contextStartTime = Date.now();
+  if (useBothQueries) {
+    const relevantChunksOriginal = findRelevantChunks(documentChunks, userMessage, 4);
+    const relevantChunksTranslated = findRelevantChunks(documentChunks, translatedQuery, 4);
+    
+    // Combine and deduplicate chunks
+    const allChunks = [...relevantChunksOriginal, ...relevantChunksTranslated];
+    uniqueChunks = Array.from(
+      new Map(allChunks.map(chunk => [chunk.source + chunk.index, chunk])).values()
+    ).slice(0, 6); // Take top 6 unique chunks (reduced from 8 for speed)
+  } else {
+    // Query is already in French, only search once
+    uniqueChunks = findRelevantChunks(documentChunks, userMessage, 6);
+  }
   const context = buildContextString(uniqueChunks);
-  console.log(`${logPrefix} ⏱️ [STEP 3] Context building took ${Date.now() - contextStartTime}ms`);
   
   // Limit context size to avoid token limit errors
   // Rough estimate: 1 token ≈ 4 characters, so 400K tokens ≈ 1.6M characters
   // Leave room for prompt and response, so limit context to ~1M characters
-  // gpt-4o-mini has 128K token limit, leave room for system prompt + response
-  // ~50K characters = ~12K tokens for context
-  const MAX_CONTEXT_LENGTH = 50000;
+  const MAX_CONTEXT_LENGTH = 1000000; // ~250K tokens
   const truncatedContext = context.length > MAX_CONTEXT_LENGTH 
     ? context.substring(0, MAX_CONTEXT_LENGTH) + '\n\n[Context truncated due to size limit...]'
     : context;
@@ -153,27 +200,42 @@ ${truncatedContext || (isEnglish ? 'No specific context available. Please inform
   const userPrompt = userMessage;
 
   try {
-    // Use gpt-4o-mini directly - it's fast and reliable
-    const actualModel = 'gpt-4o-mini';
-    console.log(`${logPrefix} ⏱️ [STEP 4] Calling OpenAI ${actualModel}...`);
-    const openaiStart = Date.now();
-    
-    const response = await client.chat.completions.create({
-      model: actualModel,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      temperature: 0.7,
-      max_tokens: 500,
-    });
+    // If model is gpt-5-nano and it fails, fallback to gpt-4o-mini
+    let actualModel = model;
+    try {
+      const response = await client.chat.completions.create({
+        model: actualModel,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature: 0.7,
+        max_tokens: 500,
+      });
 
-    const openaiDuration = Date.now() - openaiStart;
-    console.log(`${logPrefix} ⏱️ [STEP 4] OpenAI response took ${openaiDuration}ms`);
-    console.log(`${logPrefix} ⏱️ [TOTAL] Full request took ${Date.now() - totalStartTime}ms`);
-    
-    const answer = response.choices[0]?.message?.content || defaultErrorMessage;
-    return answer;
+      const answer = response.choices[0]?.message?.content || defaultErrorMessage;
+      
+      return answer;
+    } catch (modelError: any) {
+      // If gpt-5-nano doesn't exist, fallback to gpt-4o-mini
+      if (actualModel === 'gpt-5-nano' && (modelError?.message?.includes('model') || modelError?.code === 'model_not_found')) {
+        console.warn('⚠️  gpt-5-nano not available, falling back to gpt-4o-mini');
+        actualModel = 'gpt-4o-mini';
+        const response = await client.chat.completions.create({
+          model: actualModel,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          temperature: 0.7,
+          max_tokens: 500,
+        });
+
+        const answer = response.choices[0]?.message?.content || defaultErrorMessage;
+        return answer;
+      }
+      throw modelError;
+    }
   } catch (error) {
     console.error('OpenAI API error:', error);
     throw new Error(

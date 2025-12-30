@@ -2,6 +2,24 @@
 
 import { useState } from 'react';
 
+interface BigChunk {
+  id: number;
+  documentId: number;
+  chunkIndex: number;
+  size: number;
+  sizeFormatted: string;
+  sourceId: string;
+  preview: string;
+}
+
+interface DbStats {
+  documents: number;
+  chunks: number;
+  averageChunkSize: number;
+  sizeDistribution: { range: string; count: number }[];
+  biggestChunks: BigChunk[];
+}
+
 export default function MigratePage() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState<string>('');
@@ -11,6 +29,8 @@ export default function MigratePage() {
   const [duplicateCount, setDuplicateCount] = useState<number | null>(null);
   const [clearStatus, setClearStatus] = useState<'idle' | 'clearing' | 'success' | 'error'>('idle');
   const [clearMessage, setClearMessage] = useState<string>('');
+  const [dbStats, setDbStats] = useState<DbStats | null>(null);
+  const [showBigChunks, setShowBigChunks] = useState(false);
 
   const checkStatus = async () => {
     try {
@@ -59,7 +79,7 @@ export default function MigratePage() {
 
       const data = await response.json();
 
-      if (response.ok && data.status === 'success') {
+      if (response.ok && (data.status === 'success' || data.status === 'no_duplicates')) {
         setDedupeStatus('success');
         setDuplicateCount(0);
         setDedupeMessage(data.message);
@@ -94,6 +114,8 @@ export default function MigratePage() {
         setClearStatus('success');
         setClearMessage(data.message);
         setStats({ documents: 0, chunks: 0 });
+        setDuplicateCount(0);
+        setDbStats(null);
       } else {
         setClearStatus('error');
         setClearMessage(data.error || 'Failed to clear database');
@@ -101,6 +123,20 @@ export default function MigratePage() {
     } catch (error) {
       setClearStatus('error');
       setClearMessage(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  const checkBiggestChunks = async () => {
+    setShowBigChunks(true);
+    try {
+      const response = await fetch('/api/db-stats');
+      const data = await response.json();
+      
+      if (data.status === 'ok') {
+        setDbStats(data);
+      }
+    } catch (error) {
+      console.error('Failed to get stats:', error);
     }
   };
 
@@ -139,16 +175,16 @@ export default function MigratePage() {
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-8">
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-3xl mx-auto">
         <div className="bg-white rounded-2xl shadow-xl p-8">
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Database Migration</h1>
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">Database Management</h1>
           <p className="text-gray-600 mb-6">
-            Migrate documents from filesystem to PostgreSQL database
+            Manage documents and chunks in PostgreSQL database
           </p>
 
           <div className="space-y-4">
             {/* Status Check */}
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <button
                 onClick={checkStatus}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
@@ -161,6 +197,12 @@ export default function MigratePage() {
               >
                 Check Duplicates
               </button>
+              <button
+                onClick={checkBiggestChunks}
+                className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition"
+              >
+                📊 Check Biggest Chunks
+              </button>
             </div>
 
             {/* Stats Display */}
@@ -170,6 +212,51 @@ export default function MigratePage() {
                 <p className="text-lg font-semibold text-gray-800">
                   {stats.documents} documents, {stats.chunks} chunks
                 </p>
+              </div>
+            )}
+
+            {/* Biggest Chunks Display */}
+            {showBigChunks && dbStats && (
+              <div className="bg-teal-50 border border-teal-200 rounded-lg p-4">
+                <h3 className="text-sm font-semibold text-teal-800 mb-2">📊 Chunk Statistics</h3>
+                <p className="text-sm text-teal-700 mb-2">
+                  Average chunk size: <strong>{dbStats.averageChunkSize.toLocaleString()} bytes</strong>
+                </p>
+                
+                {/* Size Distribution */}
+                <div className="mb-3">
+                  <p className="text-xs font-medium text-teal-600 mb-1">Size Distribution:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {dbStats.sizeDistribution.map((d, i) => (
+                      <span key={i} className="text-xs bg-teal-100 px-2 py-1 rounded">
+                        {d.range}: {d.count}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Biggest Chunks */}
+                <p className="text-xs font-medium text-teal-600 mb-1">Top 5 Biggest Chunks:</p>
+                <div className="space-y-2">
+                  {dbStats.biggestChunks.map((chunk, i) => (
+                    <div key={chunk.id} className="bg-white rounded p-2 text-xs border border-teal-100">
+                      <div className="flex justify-between items-start mb-1">
+                        <span className="font-semibold text-teal-800">
+                          #{i + 1}: {chunk.sizeFormatted}
+                        </span>
+                        <span className="text-teal-500">
+                          Doc #{chunk.documentId}, Chunk #{chunk.chunkIndex}
+                        </span>
+                      </div>
+                      <p className="text-gray-500 truncate" title={chunk.sourceId}>
+                        Source: {chunk.sourceId.substring(0, 60)}...
+                      </p>
+                      <p className="text-gray-400 mt-1 truncate">
+                        {chunk.preview}
+                      </p>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -276,4 +363,3 @@ export default function MigratePage() {
     </main>
   );
 }
-

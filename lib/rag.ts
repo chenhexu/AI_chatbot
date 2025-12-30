@@ -1,5 +1,4 @@
-// Removed levenshtein - too CPU intensive for serverless
-// import levenshtein from 'fast-levenshtein';
+import levenshtein from 'fast-levenshtein';
 
 export interface TextChunk {
   text: string;
@@ -167,20 +166,6 @@ export function chunkText(text: string, chunkSize: number = 1500, overlap: numbe
  * Improved to give much higher scores to chunks with actual relevant content
  */
 export function calculateSimilarity(query: string, text: string, source?: string): number {
-  // OPTIMIZATION: Skip chunks that are too large (should have been chunked properly)
-  // These monster chunks (>50K chars) take 10+ seconds each to process
-  if (text.length > 50000) {
-    // Just do simple keyword check for huge chunks
-    const queryLower = query.toLowerCase();
-    const textLower = text.substring(0, 10000).toLowerCase(); // Only check first 10K chars
-    const keywords = queryLower.split(/\s+/).filter(w => w.length > 3);
-    let matches = 0;
-    for (const word of keywords) {
-      if (textLower.includes(word)) matches++;
-    }
-    return keywords.length > 0 ? (matches / keywords.length) * 0.5 : 0; // Cap at 0.5
-  }
-  
   const queryLower = query.toLowerCase();
   const textLower = text.toLowerCase();
   
@@ -355,8 +340,8 @@ function calculateSimilarityInternal(query: string, text: string): number {
         .split(/\s+/)
         .filter(w => w.length > 1 && !stopWords.has(w) && w[0]?.toLowerCase() === wordFirstLetter);
       
-      // OPTIMIZATION: Limit to first 15 matching words (reduced for Vercel)
-      const limitedTextWords = textWords.slice(0, 15);
+      // OPTIMIZATION: Limit to first 30 matching words to avoid excessive computation
+      const limitedTextWords = textWords.slice(0, 30);
       
       // Calculate similarity for each text word
       for (const textWord of limitedTextWords) {
@@ -365,7 +350,7 @@ function calculateSimilarityInternal(query: string, text: string): number {
           continue;
         }
         
-        // Substring check (removed Levenshtein for CPU optimization)
+        // Quick substring check first (much faster than Levenshtein)
         if (textWord.includes(word) || word.includes(textWord)) {
           fuzzyMatchFound = true;
           if (isActivityWord) {
@@ -376,6 +361,27 @@ function calculateSimilarityInternal(query: string, text: string): number {
             partialMatches += 0.4;
           }
           break;
+        }
+        
+        // Only calculate Levenshtein if substring match failed
+        const maxLen = Math.max(word.length, textWord.length);
+        if (maxLen === 0) continue;
+        
+        const dist = levenshtein.get(word, textWord);
+        const similarity = 1 - (dist / maxLen); // Similarity score 0-1
+        
+        // If similarity is high enough (>= 0.75), consider it a fuzzy match
+        if (similarity >= 0.75) {
+          fuzzyMatchFound = true;
+          // Give fuzzy matches lower weight than exact matches
+          if (isActivityWord) {
+            partialMatches += 1.5; // Medium-high weight for activity fuzzy matches
+          } else if (isCommonWord) {
+            partialMatches += 0.1; // Very low weight for common words
+          } else {
+            partialMatches += 0.5 * similarity; // Weight based on similarity
+          }
+          break; // Found a match, no need to check other words
         }
       }
       
@@ -746,55 +752,14 @@ export function findRelevantChunks(
   query: string,
   maxChunks: number = 5  // Increased from 3 to 5 for better coverage
 ): TextChunk[] {
-  const ragStartTime = Date.now();
-  
-  // Log the search query (may be expanded with French keywords)
-  // Filter out common stop words including "the", "does", etc.
-  const stopWords = new Set(['the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
-    'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should',
-    'le', 'la', 'les', 'de', 'du', 'des', 'un', 'une', 'et', 'ou', 'qui', 'que']);
-  const queryWords = query.toLowerCase()
-    .replace(/[^\w\sàâäéèêëïîôùûüç-]/g, ' ')
-    .split(/\s+/)
-    .filter(w => w.length > 2 && !stopWords.has(w));
-  console.log(`🔎 RAG search with ${queryWords.length} keywords: ${queryWords.slice(0, 15).join(', ')}${queryWords.length > 15 ? '...' : ''}`);
-  console.log(`⏱️ [RAG] Starting similarity calculation for ${chunks.length} chunks...`);
-  
-  // Calculate similarity scores with progress logging
-  let processedCount = 0;
-  const logInterval = Math.max(50, Math.floor(chunks.length / 10)); // Log every 10%
-  let lastLogTime = Date.now();
-  
-  const scoredChunks = chunks.map((chunk, index) => {
-    const chunkStart = Date.now();
-    const score = calculateSimilarity(query, chunk.text, chunk.source);
-    const chunkTime = Date.now() - chunkStart;
-    
-    // Log if a single chunk takes more than 500ms
-    if (chunkTime > 500) {
-      console.log(`⚠️ [RAG] SLOW CHUNK #${index}: ${chunkTime}ms - source: ${chunk.source.substring(0, 60)}... (${chunk.text.length} chars)`);
-    }
-    
-    processedCount++;
-    if (processedCount % logInterval === 0) {
-      const elapsed = Date.now() - lastLogTime;
-      console.log(`⏱️ [RAG] Processed ${processedCount}/${chunks.length} chunks (${Math.round(processedCount/chunks.length*100)}%) - last batch took ${elapsed}ms`);
-      lastLogTime = Date.now();
-    }
-    return { chunk, score };
-  });
-  
-  const scoringTime = Date.now() - ragStartTime;
-  console.log(`⏱️ [RAG] Similarity scoring took ${scoringTime}ms`);
+  // Calculate similarity scores
+  const scoredChunks = chunks.map(chunk => ({
+    chunk,
+    score: calculateSimilarity(query, chunk.text, chunk.source),
+  }));
   
   // Sort by score (descending)
-  const sortStartTime = Date.now();
   scoredChunks.sort((a, b) => b.score - a.score);
-  console.log(`⏱️ [RAG] Sorting took ${Date.now() - sortStartTime}ms`);
-  
-  // Log top 3 scores for debugging
-  console.log(`📊 Top scores: ${scoredChunks.slice(0, 3).map(s => s.score.toFixed(3)).join(', ')}`);
-  console.log(`⏱️ [RAG] Total findRelevantChunks time: ${Date.now() - ragStartTime}ms`);
   
   // Return top chunks - be more lenient with the threshold
   // If no chunks have score > 0, return top chunks anyway (might have very low scores)
@@ -843,8 +808,8 @@ export function buildContextString(chunks: TextChunk[]): string {
     return '';
   }
   
-  // Limit each chunk to ~8K characters (~2K tokens) - with 6 chunks = ~12K tokens total
-  const MAX_CHUNK_LENGTH = 8000;
+  // Limit each chunk to ~300K characters (~75K tokens) to stay within limits
+  const MAX_CHUNK_LENGTH = 300000;
   
   // Collect unique PDF URLs
   const pdfUrls = new Set<string>();

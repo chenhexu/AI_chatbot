@@ -125,21 +125,38 @@ export async function GET() {
       );
     }
 
-    // Check for duplicates by source_id
-    const duplicatesResult = await query<{ source_id: string; count: string }>(
-      `SELECT source_id, COUNT(*) as count
-       FROM documents
-       GROUP BY source_id
-       HAVING COUNT(*) > 1`
+    // Get all documents with their content
+    const allDocs = await query<{ id: number; source_id: string; content: string }>(
+      'SELECT id, source_id, content FROM documents ORDER BY id'
     );
 
-    // Check for duplicates by content hash
-    const allDocs = await query<{ id: number; content: string }>(
-      'SELECT id, content FROM documents'
-    );
+    // Track which document IDs are duplicates
+    const duplicateIds = new Set<number>();
 
+    // Check for source_id duplicates
+    const sourceIdGroups = new Map<string, number[]>();
+    for (const doc of allDocs.rows) {
+      if (!sourceIdGroups.has(doc.source_id)) {
+        sourceIdGroups.set(doc.source_id, []);
+      }
+      sourceIdGroups.get(doc.source_id)!.push(doc.id);
+    }
+
+    let sourceIdDuplicateGroups = 0;
+    for (const [_, ids] of sourceIdGroups) {
+      if (ids.length > 1) {
+        sourceIdDuplicateGroups++;
+        // Mark all but the first as duplicates
+        ids.slice(1).forEach(id => duplicateIds.add(id));
+      }
+    }
+
+    // Check for content hash duplicates (only among non-already-marked docs)
     const contentHashes = new Map<string, number[]>();
     for (const doc of allDocs.rows) {
+      // Skip if already marked as duplicate by source_id
+      if (duplicateIds.has(doc.id)) continue;
+      
       const hash = crypto.createHash('md5').update(doc.content).digest('hex');
       if (!contentHashes.has(hash)) {
         contentHashes.set(hash, []);
@@ -147,20 +164,22 @@ export async function GET() {
       contentHashes.get(hash)!.push(doc.id);
     }
 
-    const contentDuplicates = Array.from(contentHashes.entries())
-      .filter(([_, ids]) => ids.length > 1)
-      .map(([hash, ids]) => ({ hash: hash.substring(0, 8), count: ids.length }));
-
-    const totalDuplicateDocs = duplicatesResult.rows.reduce((sum, row) => sum + parseInt(row.count, 10) - 1, 0) +
-      contentDuplicates.reduce((sum, dup) => sum + dup.count - 1, 0);
+    let contentDuplicateGroups = 0;
+    for (const [_, ids] of contentHashes) {
+      if (ids.length > 1) {
+        contentDuplicateGroups++;
+        // Mark all but the first as duplicates
+        ids.slice(1).forEach(id => duplicateIds.add(id));
+      }
+    }
 
     return NextResponse.json({
       status: 'ok',
-      sourceIdDuplicates: duplicatesResult.rows.length,
-      contentDuplicates: contentDuplicates.length,
-      totalDuplicateDocuments: totalDuplicateDocs,
-      message: totalDuplicateDocs > 0
-        ? `Found ${totalDuplicateDocs} duplicate document(s)`
+      sourceIdDuplicates: sourceIdDuplicateGroups,
+      contentDuplicates: contentDuplicateGroups,
+      totalDuplicateDocuments: duplicateIds.size,
+      message: duplicateIds.size > 0
+        ? `Found ${duplicateIds.size} duplicate document(s) to remove`
         : 'No duplicates found',
     });
   } catch (error) {
