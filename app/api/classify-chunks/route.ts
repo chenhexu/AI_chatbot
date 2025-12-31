@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { query } from '@/lib/database/client';
+import { query, ensureSubjectColumn } from '@/lib/database/client';
 import { initializeDatabase } from '@/lib/database/client';
 import { classifyChunkSubject } from '@/lib/subjectClassifier';
 
@@ -25,9 +25,15 @@ export async function POST() {
 
     // Ensure schema is up to date (adds subject column if missing)
     try {
-      await initializeDatabase();
+      await ensureSubjectColumn();
     } catch (schemaError) {
       console.error('Schema initialization error (non-critical):', schemaError);
+      // Try full initialization as fallback
+      try {
+        await initializeDatabase();
+      } catch (fallbackError) {
+        console.error('Full initialization also failed:', fallbackError);
+      }
     }
 
     console.log('🧠 Starting chunk classification...');
@@ -99,9 +105,15 @@ export async function GET() {
 
     // Ensure schema is up to date (adds subject column if missing)
     try {
-      await initializeDatabase();
+      await ensureSubjectColumn();
     } catch (schemaError) {
       console.error('Schema initialization error (non-critical):', schemaError);
+      // Try full initialization as fallback
+      try {
+        await initializeDatabase();
+      } catch (fallbackError) {
+        console.error('Full initialization also failed:', fallbackError);
+      }
     }
 
     const total = await query<{ count: string }>('SELECT COUNT(*) as count FROM chunks');

@@ -39,6 +39,31 @@ export async function query<T extends QueryResultRow = any>(text: string, params
 }
 
 /**
+ * Ensure subject column exists in chunks table (migration)
+ */
+export async function ensureSubjectColumn(): Promise<void> {
+  try {
+    // Check if column exists
+    const checkResult = await query<{ exists: boolean }>(
+      `SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'chunks' AND column_name = 'subject'
+      ) as exists`
+    );
+    
+    if (!checkResult.rows[0].exists) {
+      console.log('📝 Adding subject column to chunks table...');
+      await query('ALTER TABLE chunks ADD COLUMN subject VARCHAR(100)');
+      await query('CREATE INDEX IF NOT EXISTS idx_chunks_subject ON chunks(subject)');
+      console.log('✅ Subject column added');
+    }
+  } catch (error) {
+    console.error('❌ Error ensuring subject column:', error);
+    throw error;
+  }
+}
+
+/**
  * Initialize database schema
  */
 export async function initializeDatabase(): Promise<void> {
@@ -46,16 +71,56 @@ export async function initializeDatabase(): Promise<void> {
     const fs = require('fs');
     const path = require('path');
     const schemaPath = path.join(process.cwd(), 'lib', 'database', 'schema.sql');
-    const schema = fs.readFileSync(schemaPath, 'utf8');
+    let schema = fs.readFileSync(schemaPath, 'utf8');
     
-    // Execute schema (split by semicolons for multiple statements)
+    // Extract DO blocks first (they contain semicolons)
+    const doBlocks: string[] = [];
+    const doBlockRegex = /DO\s+\$\$(\w*)\s*BEGIN[\s\S]*?END\s+\$\$\1\s*;/gi;
+    let match;
+    
+    while ((match = doBlockRegex.exec(schema)) !== null) {
+      doBlocks.push(match[0]);
+      // Replace DO block with placeholder
+      schema = schema.replace(match[0], `-- DO_BLOCK_PLACEHOLDER_${doBlocks.length - 1}`);
+    }
+    
+    // Now split remaining schema by semicolons
     const statements = schema.split(';').filter((s: string) => s.trim().length > 0);
     
+    // Replace placeholders with actual DO blocks
+    const allStatements: string[] = [];
     for (const statement of statements) {
-      if (statement.trim()) {
-        await query(statement);
+      if (statement.includes('DO_BLOCK_PLACEHOLDER')) {
+        // Find and add the corresponding DO block
+        const placeholderMatch = statement.match(/DO_BLOCK_PLACEHOLDER_(\d+)/);
+        if (placeholderMatch) {
+          const blockIndex = parseInt(placeholderMatch[1], 10);
+          if (doBlocks[blockIndex]) {
+            allStatements.push(doBlocks[blockIndex]);
+          }
+        }
+      } else {
+        allStatements.push(statement);
       }
     }
+    
+    // Execute all statements
+    for (const statement of allStatements) {
+      const trimmed = statement.trim();
+      if (trimmed && !trimmed.startsWith('--')) {
+        try {
+          await query(trimmed);
+        } catch (error: any) {
+          // Ignore "already exists" errors for tables/indexes
+          if (error?.code !== '42P07' && error?.code !== '42710') {
+            console.warn('⚠️ Schema statement warning:', error.message);
+          }
+        }
+      }
+    }
+    
+    // Ensure subject column exists (migration - double check)
+    await ensureSubjectColumn();
     
     console.log('✅ Database schema initialized');
   } catch (error) {
