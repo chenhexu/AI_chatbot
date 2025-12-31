@@ -48,6 +48,9 @@ export default function MigratePage() {
   const [skippedFiles, setSkippedFiles] = useState<SkippedFile[]>([]);
   const [skippedChunksCount, setSkippedChunksCount] = useState<number>(0);
   const [splitChunksCount, setSplitChunksCount] = useState<number>(0);
+  const [classifyStatus, setClassifyStatus] = useState<'idle' | 'checking' | 'classifying' | 'success' | 'error'>('idle');
+  const [classifyMessage, setClassifyMessage] = useState<string>('');
+  const [classifyStats, setClassifyStats] = useState<{ total: number; classified: number; unclassified: number; percentage: number } | null>(null);
 
   const checkStatus = async () => {
     try {
@@ -61,8 +64,9 @@ export default function MigratePage() {
         setMessage(data.message || data.error || 'Unknown status');
       }
       
-      // Also check for duplicates
+      // Also check for duplicates and classification
       checkDuplicates();
+      checkClassificationStatus();
     } catch (error) {
       setMessage(`Error: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -157,6 +161,57 @@ export default function MigratePage() {
     }
   };
 
+  const checkClassificationStatus = async () => {
+    setClassifyStatus('checking');
+    try {
+      const response = await fetch('/api/classify-chunks');
+      const data = await response.json();
+      
+      if (data.status === 'ok') {
+        setClassifyStats({
+          total: data.total,
+          classified: data.classified,
+          unclassified: data.unclassified,
+          percentage: data.percentage,
+        });
+        setClassifyMessage(`${data.classified}/${data.total} chunks classified (${data.percentage}%)`);
+        setClassifyStatus('idle');
+      } else {
+        setClassifyStatus('error');
+        setClassifyMessage(data.error || 'Failed to check status');
+      }
+    } catch (error) {
+      setClassifyStatus('error');
+      setClassifyMessage(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  const runClassification = async () => {
+    setClassifyStatus('classifying');
+    setClassifyMessage('Classifying chunks... (this may take a while)');
+
+    try {
+      const response = await fetch('/api/classify-chunks', {
+        method: 'POST',
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.status === 'success') {
+        setClassifyStatus('success');
+        setClassifyMessage(data.message);
+        // Refresh status
+        await checkClassificationStatus();
+      } else {
+        setClassifyStatus('error');
+        setClassifyMessage(data.error || data.message || 'Classification failed');
+      }
+    } catch (error) {
+      setClassifyStatus('error');
+      setClassifyMessage(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
   const runMigration = async (force: boolean = false) => {
     setStatus('loading');
     setMessage('Starting migration... (check Render logs for progress)');
@@ -188,6 +243,8 @@ export default function MigratePage() {
         if (data.splitChunks) {
           setSplitChunksCount(data.splitChunks);
         }
+        // Check classification status after migration
+        checkClassificationStatus();
       } else if (data.status === 'already_migrated') {
         setStatus('idle');
         setStats({ documents: data.documents, chunks: data.chunks });
@@ -245,6 +302,12 @@ export default function MigratePage() {
                 className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition"
               >
                 📊 Check Biggest Chunks
+              </button>
+              <button
+                onClick={checkClassificationStatus}
+                className="px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition"
+              >
+                🧠 Check Classification
               </button>
             </div>
 
@@ -389,6 +452,41 @@ export default function MigratePage() {
                     'text-purple-700'
                   }`}>
                     {dedupeMessage}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Chunk Classification */}
+            {(classifyStats || classifyStatus !== 'idle') && (
+              <div className="bg-pink-50 border border-pink-200 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <p className="text-sm font-semibold text-pink-800">
+                      Chunk Classification
+                    </p>
+                    {classifyStats && (
+                      <p className="text-xs text-pink-600 mt-1">
+                        {classifyStats.classified}/{classifyStats.total} classified ({classifyStats.percentage}%)
+                        {classifyStats.unclassified > 0 && ` - ${classifyStats.unclassified} remaining`}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    onClick={runClassification}
+                    disabled={classifyStatus === 'classifying' || classifyStatus === 'checking'}
+                    className="px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  >
+                    {classifyStatus === 'classifying' ? 'Classifying...' : '🧠 Classify Chunks'}
+                  </button>
+                </div>
+                {classifyMessage && (
+                  <p className={`text-sm ${
+                    classifyStatus === 'success' ? 'text-green-700' :
+                    classifyStatus === 'error' ? 'text-red-700' :
+                    'text-pink-700'
+                  }`}>
+                    {classifyMessage}
                   </p>
                 )}
               </div>
