@@ -285,7 +285,7 @@ export async function POST(request: NextRequest) {
 
         // Process chunks for this document
         const docChunks = chunksBySource.get(doc.id) || [];
-        const processedChunks: { text: string; index: number; source: string; pdfUrl?: string }[] = [];
+        const processedChunks: { text: string; index: number; source: string; pdfUrl?: string; subject?: string }[] = [];
         let chunkIndex = 0;
         
         for (const chunk of docChunks) {

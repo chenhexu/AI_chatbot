@@ -4,6 +4,7 @@ import { processDocuments, type TextChunk } from '@/lib/rag';
 import { generateChatResponse } from '@/lib/openai';
 import { loadAllChunks } from '@/lib/database/documentStore';
 import { query } from '@/lib/database/client';
+import { classifyQuerySubject } from '@/lib/subjectClassifier';
 
 // Cache document chunks in memory (in production, consider using Redis or similar)
 let cachedChunks: TextChunk[] | null = null;
@@ -149,11 +150,42 @@ export async function POST(request: NextRequest) {
 
     console.log(`[${requestId}] 📨 Received query: "${message}" (provider: ${provider})`);
 
-    // Get document chunks (includes scraped data from data/scraped/)
-    const chunks = await getDocumentChunks();
-    console.log(`[${requestId}] 🔍 Processing query with ${chunks.length} total chunks available`);
+    // Step 1: Classify query subject (fast Gemini call ~300ms)
+    console.log(`[${requestId}] 🧠 Classifying query subject...`);
+    let querySubjects: string[] = [];
+    try {
+      querySubjects = await classifyQuerySubject(message);
+      console.log(`[${requestId}] ✅ Query subjects: ${querySubjects.join(', ')}`);
+    } catch (error) {
+      console.error(`[${requestId}] ⚠️ Subject classification failed, using all chunks:`, error);
+      querySubjects = []; // Fallback to all chunks
+    }
 
-    // Generate response using selected AI provider with RAG
+    // Step 2: Load chunks filtered by subject (much faster!)
+    let chunks: TextChunk[];
+    if (process.env.DATABASE_URL && querySubjects.length > 0) {
+      // Try to load from database with subject filter
+      try {
+        chunks = await loadAllChunks(querySubjects);
+        // If we got very few chunks, might be because chunks aren't classified yet
+        // Fallback to all chunks if filtered result is too small
+        if (chunks.length < 10) {
+          console.log(`[${requestId}] ⚠️ Only ${chunks.length} chunks found with subject filter, loading all chunks...`);
+          chunks = await loadAllChunks(); // Load all chunks
+        } else {
+          console.log(`[${requestId}] 🔍 Loaded ${chunks.length} chunks from subjects: ${querySubjects.join(', ')}`);
+        }
+      } catch (error) {
+        console.error(`[${requestId}] ⚠️ Subject filter failed, loading all chunks:`, error);
+        chunks = await loadAllChunks(); // Fallback to all chunks
+      }
+    } else {
+      // Load all chunks (filesystem or no subject filter)
+      chunks = await getDocumentChunks();
+      console.log(`[${requestId}] 🔍 Loaded ${chunks.length} chunks (no subject filter)`);
+    }
+
+    // Step 3: Generate response using selected AI provider with RAG
     const response = await generateChatResponse(message, chunks, requestId, provider);
 
     return NextResponse.json({ response, provider });

@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS chunks (
   chunk_index INTEGER NOT NULL, -- Index of chunk within document
   source VARCHAR(500) NOT NULL, -- Source identifier for compatibility
   pdf_url VARCHAR(1000), -- PDF URL if applicable
+  subject VARCHAR(100), -- Subject/topic classification for faster filtering
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(document_id, chunk_index)
 );
@@ -28,6 +29,7 @@ CREATE TABLE IF NOT EXISTS chunks (
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_chunks_source ON chunks(source);
 CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON chunks(document_id);
+CREATE INDEX IF NOT EXISTS idx_chunks_subject ON chunks(subject);
 CREATE INDEX IF NOT EXISTS idx_documents_source_type ON documents(source_type);
 CREATE INDEX IF NOT EXISTS idx_documents_source_id ON documents(source_id);
 

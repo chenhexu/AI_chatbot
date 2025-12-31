@@ -54,7 +54,7 @@ export async function storeDocument(
  */
 export async function storeChunks(
   documentId: number,
-  chunks: Array<{ text: string; index: number; source: string; pdfUrl?: string }>
+  chunks: Array<{ text: string; index: number; source: string; pdfUrl?: string; subject?: string }>
 ): Promise<void> {
   // Delete existing chunks for this document
   await query('DELETE FROM chunks WHERE document_id = $1', [documentId]);
@@ -67,28 +67,42 @@ export async function storeChunks(
   let paramIndex = 1;
 
   for (const chunk of chunks) {
-    values.push(`($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4})`);
-    params.push(documentId, chunk.text, chunk.index, chunk.source, chunk.pdfUrl || null);
-    paramIndex += 5;
+    values.push(`($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5})`);
+    params.push(documentId, chunk.text, chunk.index, chunk.source, chunk.pdfUrl || null, chunk.subject || null);
+    paramIndex += 6;
   }
 
   await query(
-    `INSERT INTO chunks (document_id, text, chunk_index, source, pdf_url)
+    `INSERT INTO chunks (document_id, text, chunk_index, source, pdf_url, subject)
      VALUES ${values.join(', ')}`,
     params
   );
 }
 
 /**
- * Load all chunks from database
+ * Load chunks from database, optionally filtered by subjects
  */
-export async function loadAllChunks(): Promise<TextChunk[]> {
+export async function loadAllChunks(subjects?: string[]): Promise<TextChunk[]> {
   try {
     console.log('📡 Executing database query to load chunks...');
+    
+    let sql = `SELECT text, source, chunk_index, pdf_url
+       FROM chunks`;
+    
+    const params: any[] = [];
+    if (subjects && subjects.length > 0) {
+      // Filter by subjects
+      const placeholders = subjects.map((_, i) => `$${i + 1}`).join(', ');
+      sql += ` WHERE subject IN (${placeholders})`;
+      params.push(...subjects);
+      console.log(`🔍 Filtering by subjects: ${subjects.join(', ')}`);
+    }
+    
+    sql += ` ORDER BY document_id, chunk_index`;
+    
     const result = await query<{ text: string; source: string; chunk_index: number; pdf_url: string | null }>(
-      `SELECT text, source, chunk_index, pdf_url
-       FROM chunks
-       ORDER BY document_id, chunk_index`
+      sql,
+      params
     );
 
     console.log(`📊 Query returned ${result.rows.length} rows`);
