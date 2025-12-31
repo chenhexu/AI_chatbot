@@ -40,3 +40,15 @@ CREATE INDEX IF NOT EXISTS idx_chunks_text_search ON chunks USING gin(to_tsvecto
 -- Drop the documents content search index if it exists (too large for tsvector)
 DROP INDEX IF EXISTS idx_documents_content_search;
 
+-- Add subject column to chunks if it doesn't exist (migration for existing databases)
+DO $$ 
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'chunks' AND column_name = 'subject'
+  ) THEN
+    ALTER TABLE chunks ADD COLUMN subject VARCHAR(100);
+    CREATE INDEX IF NOT EXISTS idx_chunks_subject ON chunks(subject);
+  END IF;
+END $$;
+

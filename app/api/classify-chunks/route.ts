@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/database/client';
+import { initializeDatabase } from '@/lib/database/client';
 import { classifyChunkSubject } from '@/lib/subjectClassifier';
 
 /**
@@ -20,6 +21,13 @@ export async function POST() {
         { error: 'GEMINI_API_KEY not set', status: 'not_configured' },
         { status: 400 }
       );
+    }
+
+    // Ensure schema is up to date (adds subject column if missing)
+    try {
+      await initializeDatabase();
+    } catch (schemaError) {
+      console.error('Schema initialization error (non-critical):', schemaError);
     }
 
     console.log('🧠 Starting chunk classification...');
@@ -87,6 +95,13 @@ export async function GET() {
         { error: 'DATABASE_URL not set', status: 'not_configured' },
         { status: 400 }
       );
+    }
+
+    // Ensure schema is up to date (adds subject column if missing)
+    try {
+      await initializeDatabase();
+    } catch (schemaError) {
+      console.error('Schema initialization error (non-critical):', schemaError);
     }
 
     const total = await query<{ count: string }>('SELECT COUNT(*) as count FROM chunks');
