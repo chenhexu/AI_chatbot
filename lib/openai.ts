@@ -98,37 +98,11 @@ export async function generateChatResponse(
   // Use gpt-4o-mini as the default model (fast and cheap)
   const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
   
-  // Translate query to French for better document matching
-  let translatedQuery: string;
-  try {
-    translatedQuery = await translateQueryToFrench(userMessage, client);
-    console.log(`${logPrefix} 🌐 Translation: "${userMessage}" -> "${translatedQuery}"`);
-  } catch (error) {
-    console.error('❌ Translation error:', error);
-    // If translation fails, use original query
-    translatedQuery = userMessage;
-    console.log(`⚠️  Using original query (translation failed): "${userMessage}"`);
-  }
-  
-  // Use both original and translated query for chunk finding (only if translation changed the query)
-  // This ensures we find relevant chunks regardless of language
-  const useBothQueries = translatedQuery.toLowerCase() !== userMessage.toLowerCase();
-  let uniqueChunks: TextChunk[];
-  
-  if (useBothQueries) {
-    const relevantChunksOriginal = findRelevantChunks(documentChunks, userMessage, 4);
-    const relevantChunksTranslated = findRelevantChunks(documentChunks, translatedQuery, 4);
-    
-    // Combine and deduplicate chunks
-    const allChunks = [...relevantChunksOriginal, ...relevantChunksTranslated];
-    uniqueChunks = Array.from(
-      new Map(allChunks.map(chunk => [chunk.source + chunk.index, chunk])).values()
-    ).slice(0, 6); // Take top 6 unique chunks (reduced from 8 for speed)
-  } else {
-    // Query is already in French, only search once
-    uniqueChunks = findRelevantChunks(documentChunks, userMessage, 6);
-  }
+  // Find relevant chunks directly (skip translation for speed)
+  console.log(`${logPrefix} 🔎 Finding relevant chunks...`);
+  const uniqueChunks = findRelevantChunks(documentChunks, userMessage, 5);
   const context = buildContextString(uniqueChunks);
+  console.log(`${logPrefix} ✅ Found ${uniqueChunks.length} chunks`);
   
   // Limit context size to avoid token limit errors
   // Rough estimate: 1 token ≈ 4 characters, so 400K tokens ≈ 1.6M characters
@@ -223,19 +197,37 @@ ${truncatedContext || (isEnglish ? 'No specific context available. Please inform
 
   try {
     console.log(`${logPrefix} 🤖 Calling OpenAI with model: ${model}`);
-    const response = await client.chat.completions.create({
-      model: model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      temperature: 0.7,
-      max_tokens: 500,
-    });
-
-    const answer = response.choices[0]?.message?.content || defaultErrorMessage;
-    console.log(`${logPrefix} ✅ Response received (${answer.length} chars)`);
-    return answer;
+    
+    // Add timeout to prevent Render from killing the request
+    const timeoutMs = 25000; // 25 seconds (Render has 30s limit)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    
+    try {
+      const response = await client.chat.completions.create({
+        model: model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature: 0.7,
+        max_tokens: 400, // Reduced for faster response
+      });
+      
+      clearTimeout(timeoutId);
+      const answer = response.choices[0]?.message?.content || defaultErrorMessage;
+      console.log(`${logPrefix} ✅ Response received (${answer.length} chars)`);
+      return answer;
+    } catch (apiError: unknown) {
+      clearTimeout(timeoutId);
+      if (apiError instanceof Error && apiError.name === 'AbortError') {
+        console.error(`${logPrefix} ⏱️ OpenAI request timed out after ${timeoutMs}ms`);
+        return isEnglish 
+          ? "The request took too long. Please try again with a simpler question."
+          : "La requête a pris trop de temps. Veuillez réessayer avec une question plus simple.";
+      }
+      throw apiError;
+    }
   } catch (error) {
     console.error('OpenAI API error:', error);
     throw new Error(
@@ -296,11 +288,29 @@ Answer:`;
 
   try {
     console.log(`${logPrefix} 🤖 Calling Gemini (gemini-1.5-flash)`);
-    const result = await model.generateContent(prompt);
+    
+    // Add timeout
+    const timeoutMs = 25000;
+    const timeoutPromise = new Promise<never>((_, reject) => 
+      setTimeout(() => reject(new Error('Gemini timeout')), timeoutMs)
+    );
+    
+    const result = await Promise.race([
+      model.generateContent(prompt),
+      timeoutPromise
+    ]);
+    
     const answer = result.response.text();
     console.log(`${logPrefix} ✅ Gemini response received (${answer.length} chars)`);
     return answer;
   } catch (error) {
+    if (error instanceof Error && error.message === 'Gemini timeout') {
+      console.error(`${logPrefix} ⏱️ Gemini request timed out`);
+      const isEnglish = /\b(the|is|are|who|what|where|when|why|how|can|will)\b/i.test(userMessage);
+      return isEnglish 
+        ? "The request took too long. Please try again."
+        : "La requête a pris trop de temps. Veuillez réessayer.";
+    }
     console.error('Gemini API error:', error);
     throw new Error(
       `Failed to generate Gemini response: ${error instanceof Error ? error.message : 'Unknown error'}`
