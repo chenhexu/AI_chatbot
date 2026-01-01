@@ -38,9 +38,9 @@ export async function POST() {
 
     console.log('🧠 Starting chunk classification...');
 
-    // Reduce batch size to 5 to respect free tier rate limit (5 requests/minute)
-    const BATCH_SIZE = 5;
-    const DELAY_BETWEEN_REQUESTS_MS = 13000; // 13 seconds between requests (60s / 5 = 12s, add 1s buffer)
+    // Batch size and delay for gemini-2.5-flash-lite: 15 requests/minute, 1000/day
+    const BATCH_SIZE = 15; // Process 15 chunks per batch (matches per-minute limit)
+    const DELAY_BETWEEN_REQUESTS_MS = 5000; // 5 seconds between requests (60s / 15 = 4s, add 1s buffer)
 
     // Get unclassified chunks (limit to batch size to respect rate limits)
     const unclassified = await query<{ id: number; text: string }>(
