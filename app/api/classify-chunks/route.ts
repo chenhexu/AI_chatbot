@@ -1,7 +1,52 @@
 import { NextResponse } from 'next/server';
-import { query, ensureSubjectColumn } from '@/lib/database/client';
+import { query, ensureSubjectColumn, ensureFailedClassificationsTable } from '@/lib/database/client';
 import { initializeDatabase } from '@/lib/database/client';
 import { classifyChunkSubject } from '@/lib/subjectClassifier';
+
+/**
+ * Extract retry delay from Gemini API error message
+ * Returns delay in milliseconds, or null if not found
+ */
+function extractRetryDelay(error: any): number | null {
+  try {
+    const errorStr = JSON.stringify(error);
+    // Look for retry delay in error details (e.g., "Please retry in 14.5677494s")
+    const retryMatch = errorStr.match(/Please retry in ([\d.]+)s/i);
+    if (retryMatch) {
+      const seconds = parseFloat(retryMatch[1]);
+      return Math.ceil(seconds * 1000) + 1000; // Convert to ms and add 1 second buffer
+    }
+    
+    // Also check errorDetails for RetryInfo
+    if (error?.errorDetails) {
+      const retryInfo = error.errorDetails.find((d: any) => d['@type']?.includes('RetryInfo'));
+      if (retryInfo?.retryDelay) {
+        const seconds = parseFloat(retryInfo.retryDelay);
+        return Math.ceil(seconds * 1000) + 1000;
+      }
+    }
+  } catch (e) {
+    // Ignore parsing errors
+  }
+  return null;
+}
+
+/**
+ * Store failed classification in database
+ */
+async function storeFailedClassification(chunkId: number, errorMessage: string): Promise<void> {
+  try {
+    await query(
+      `INSERT INTO failed_classifications (chunk_id, error_message, retry_count)
+       VALUES ($1, $2, 0)
+       ON CONFLICT (chunk_id) 
+       DO UPDATE SET error_message = EXCLUDED.error_message, retry_count = failed_classifications.retry_count + 1, failed_at = CURRENT_TIMESTAMP`,
+      [chunkId, errorMessage.substring(0, 1000)] // Limit error message length
+    );
+  } catch (err) {
+    console.error(`Failed to store failed classification for chunk ${chunkId}:`, err);
+  }
+}
 
 /**
  * POST /api/classify-chunks - Classify unclassified chunks by subject
@@ -23,14 +68,16 @@ export async function POST() {
       );
     }
 
-    // Ensure schema is up to date (adds subject column if missing)
+    // Ensure schema is up to date (adds subject column and failed_classifications table if missing)
     try {
       await ensureSubjectColumn();
+      await ensureFailedClassificationsTable();
     } catch (schemaError) {
       console.error('Schema initialization error (non-critical):', schemaError);
       // Try full initialization as fallback
       try {
         await initializeDatabase();
+        await ensureFailedClassificationsTable();
       } catch (fallbackError) {
         console.error('Full initialization also failed:', fallbackError);
       }
@@ -72,22 +119,54 @@ export async function POST() {
       try {
         const subject = await classifyChunkSubject(chunk.text);
         await query('UPDATE chunks SET subject = $1 WHERE id = $2', [subject, chunk.id]);
+        
+        // Remove from failed_classifications if it was there
+        await query('DELETE FROM failed_classifications WHERE chunk_id = $1', [chunk.id]);
+        
         classified++;
         console.log(`   ✅ Classified chunk ${chunk.id} as "${subject}" (${classified}/${unclassified.rows.length})`);
       } catch (error: any) {
         errors++;
         const errorMsg = error instanceof Error ? error.message : String(error);
+        const errorFull = JSON.stringify(error);
         
         // Check if it's a rate limit error
-        if (errorMsg.includes('429') || errorMsg.includes('quota') || errorMsg.includes('rate limit')) {
-          console.error(`   ⚠️ Rate limit hit for chunk ${chunk.id}, stopping batch. Please wait and try again.`);
-          // Don't mark as 'other', leave it unclassified so it can be retried
-          break; // Stop processing this batch
+        const isRateLimit = errorMsg.includes('429') || errorMsg.includes('quota') || errorMsg.includes('rate limit');
+        
+        if (isRateLimit) {
+          // Extract retry delay from error
+          const retryDelay = extractRetryDelay(error);
+          
+          if (retryDelay !== null) {
+            console.log(`   ⏳ Rate limit hit for chunk ${chunk.id}. Retrying after ${retryDelay / 1000}s...`);
+            try {
+              // Wait for retry delay + 1 second buffer
+              await new Promise(resolve => setTimeout(resolve, retryDelay));
+              
+              // Retry classification
+              const subject = await classifyChunkSubject(chunk.text);
+              await query('UPDATE chunks SET subject = $1 WHERE id = $2', [subject, chunk.id]);
+              
+              // Remove from failed_classifications if it was there
+              await query('DELETE FROM failed_classifications WHERE chunk_id = $1', [chunk.id]);
+              
+              classified++;
+              console.log(`   ✅ Classified chunk ${chunk.id} as "${subject}" after retry (${classified}/${unclassified.rows.length})`);
+            } catch (retryError: any) {
+              // Retry also failed, store in failed_classifications
+              const retryErrorMsg = retryError instanceof Error ? retryError.message : String(retryError);
+              console.error(`   ❌ Retry failed for chunk ${chunk.id}, storing in failed classifications:`, retryErrorMsg);
+              await storeFailedClassification(chunk.id, `Rate limit retry failed: ${retryErrorMsg}`);
+            }
+          } else {
+            // Can't extract delay, store as failed
+            console.error(`   ⚠️ Rate limit hit for chunk ${chunk.id} but couldn't extract retry delay, storing as failed`);
+            await storeFailedClassification(chunk.id, errorMsg);
+          }
         } else {
+          // Non-rate-limit error, store as failed
           console.error(`   ❌ Failed to classify chunk ${chunk.id}:`, errorMsg);
-          // For non-rate-limit errors, mark as 'other' to avoid retrying
-          await query('UPDATE chunks SET subject = $1 WHERE id = $2', ['other', chunk.id]);
-          classified++;
+          await storeFailedClassification(chunk.id, errorMsg);
         }
       }
     }
@@ -195,14 +274,16 @@ export async function GET() {
       );
     }
 
-    // Ensure schema is up to date (adds subject column if missing)
+    // Ensure schema is up to date (adds subject column and failed_classifications table if missing)
     try {
       await ensureSubjectColumn();
+      await ensureFailedClassificationsTable();
     } catch (schemaError) {
       console.error('Schema initialization error (non-critical):', schemaError);
       // Try full initialization as fallback
       try {
         await initializeDatabase();
+        await ensureFailedClassificationsTable();
       } catch (fallbackError) {
         console.error('Full initialization also failed:', fallbackError);
       }

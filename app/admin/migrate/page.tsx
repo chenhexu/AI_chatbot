@@ -51,6 +51,10 @@ export default function MigratePage() {
   const [classifyStatus, setClassifyStatus] = useState<'idle' | 'checking' | 'classifying' | 'clearing' | 'success' | 'error'>('idle');
   const [classifyMessage, setClassifyMessage] = useState<string>('');
   const [classifyStats, setClassifyStats] = useState<{ total: number; classified: number; unclassified: number; percentage: number } | null>(null);
+  const [failedChunks, setFailedChunks] = useState<Array<{ id: number; chunk_id: number; error_message: string | null; failed_at: string; retry_count: number; source: string; text_preview: string }>>([]);
+  const [showFailedChunks, setShowFailedChunks] = useState(false);
+  const [retryStatus, setRetryStatus] = useState<'idle' | 'retrying' | 'success' | 'error'>('idle');
+  const [retryMessage, setRetryMessage] = useState<string>('');
 
   const checkStatus = async () => {
     try {
@@ -239,6 +243,48 @@ export default function MigratePage() {
     } catch (error) {
       setClassifyStatus('error');
       setClassifyMessage(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  const viewFailedChunks = async () => {
+    setShowFailedChunks(true);
+    try {
+      const response = await fetch('/api/failed-classifications');
+      const data = await response.json();
+      
+      if (data.status === 'ok') {
+        setFailedChunks(data.chunks || []);
+      }
+    } catch (error) {
+      console.error('Failed to load failed chunks:', error);
+    }
+  };
+
+  const retryFailedChunks = async () => {
+    setRetryStatus('retrying');
+    setRetryMessage('Retrying failed classifications...');
+
+    try {
+      const response = await fetch('/api/failed-classifications', {
+        method: 'PUT',
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.status === 'success') {
+        setRetryStatus('success');
+        setRetryMessage(data.message);
+        // Refresh failed chunks list
+        await viewFailedChunks();
+        // Refresh classification status
+        await checkClassificationStatus();
+      } else {
+        setRetryStatus('error');
+        setRetryMessage(data.error || data.message || 'Failed to retry classifications');
+      }
+    } catch (error) {
+      setRetryStatus('error');
+      setRetryMessage(`Error: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
 
@@ -519,6 +565,12 @@ export default function MigratePage() {
                     >
                       {classifyStatus === 'classifying' ? 'Classifying...' : '🧠 Classify Chunks'}
                     </button>
+                    <button
+                      onClick={viewFailedChunks}
+                      className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition text-sm"
+                    >
+                      ⚠️ View Failed
+                    </button>
                   </div>
                 </div>
                 {classifyMessage && (
@@ -529,6 +581,80 @@ export default function MigratePage() {
                   }`}>
                     {classifyMessage}
                   </p>
+                )}
+              </div>
+            )}
+
+            {/* Failed Classifications */}
+            {showFailedChunks && (
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <p className="text-sm font-semibold text-orange-800">
+                      Failed Classifications
+                    </p>
+                    <p className="text-xs text-orange-600 mt-1">
+                      {failedChunks.length} chunks that failed to classify
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={retryFailedChunks}
+                      disabled={retryStatus === 'retrying' || failedChunks.length === 0}
+                      className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                    >
+                      {retryStatus === 'retrying' ? 'Retrying...' : '🔄 Retry Failed'}
+                    </button>
+                    <button
+                      onClick={() => setShowFailedChunks(false)}
+                      className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition text-sm"
+                    >
+                      ✕ Close
+                    </button>
+                  </div>
+                </div>
+                {retryMessage && (
+                  <p className={`text-sm mb-2 ${
+                    retryStatus === 'success' ? 'text-green-700' :
+                    retryStatus === 'error' ? 'text-red-700' :
+                    'text-orange-700'
+                  }`}>
+                    {retryMessage}
+                  </p>
+                )}
+                {failedChunks.length > 0 ? (
+                  <div className="mt-2 max-h-96 overflow-y-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-orange-100">
+                        <tr>
+                          <th className="p-2 text-left">Chunk ID</th>
+                          <th className="p-2 text-left">Source</th>
+                          <th className="p-2 text-left">Error</th>
+                          <th className="p-2 text-left">Retries</th>
+                          <th className="p-2 text-left">Failed At</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {failedChunks.map((chunk) => (
+                          <tr key={chunk.id} className="border-t border-orange-200">
+                            <td className="p-2 font-mono">{chunk.chunk_id}</td>
+                            <td className="p-2 text-gray-600 truncate max-w-xs" title={chunk.source}>
+                              {chunk.source.split('/').pop()}
+                            </td>
+                            <td className="p-2 text-red-600 text-xs truncate max-w-md" title={chunk.error_message || ''}>
+                              {chunk.error_message || 'Unknown error'}
+                            </td>
+                            <td className="p-2">{chunk.retry_count}</td>
+                            <td className="p-2 text-gray-500">
+                              {new Date(chunk.failed_at).toLocaleString()}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="text-sm text-orange-600 mt-2">No failed chunks to display</p>
                 )}
               </div>
             )}

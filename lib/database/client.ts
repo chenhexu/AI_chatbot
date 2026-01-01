@@ -64,6 +64,43 @@ export async function ensureSubjectColumn(): Promise<void> {
 }
 
 /**
+ * Ensure failed_classifications table exists (migration)
+ */
+export async function ensureFailedClassificationsTable(): Promise<void> {
+  try {
+    // Check if table exists
+    const checkResult = await query<{ exists: boolean }>(
+      `SELECT EXISTS (
+        SELECT 1 FROM information_schema.tables 
+        WHERE table_name = 'failed_classifications'
+      ) as exists`
+    );
+    
+    if (!checkResult.rows[0].exists) {
+      console.log('📝 Creating failed_classifications table...');
+      await query(`
+        CREATE TABLE failed_classifications (
+          id SERIAL PRIMARY KEY,
+          chunk_id INTEGER NOT NULL REFERENCES chunks(id) ON DELETE CASCADE,
+          error_message TEXT,
+          failed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          retry_count INTEGER DEFAULT 0,
+          UNIQUE(chunk_id)
+        )
+      `);
+      await query('CREATE INDEX IF NOT EXISTS idx_failed_classifications_chunk_id ON failed_classifications(chunk_id)');
+      console.log('✅ Failed classifications table created');
+    }
+  } catch (error: any) {
+    // Ignore if table already exists
+    if (error?.code !== '42P07') {
+      console.error('❌ Error ensuring failed_classifications table:', error);
+      throw error;
+    }
+  }
+}
+
+/**
  * Initialize database schema
  */
 export async function initializeDatabase(): Promise<void> {

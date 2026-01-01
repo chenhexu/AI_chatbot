@@ -52,3 +52,16 @@ BEGIN
   END IF;
 END $$;
 
+-- Failed classifications table: stores chunks that failed to classify
+CREATE TABLE IF NOT EXISTS failed_classifications (
+  id SERIAL PRIMARY KEY,
+  chunk_id INTEGER NOT NULL REFERENCES chunks(id) ON DELETE CASCADE,
+  error_message TEXT,
+  failed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  retry_count INTEGER DEFAULT 0,
+  UNIQUE(chunk_id)
+);
+
+-- Index for faster lookups
+CREATE INDEX IF NOT EXISTS idx_failed_classifications_chunk_id ON failed_classifications(chunk_id);
+
