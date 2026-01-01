@@ -123,6 +123,8 @@ export async function POST() {
  * DELETE /api/classify-chunks - Clear all classifications (set subject to NULL)
  */
 export async function DELETE() {
+  const startTime = Date.now();
+  
   try {
     if (!process.env.DATABASE_URL) {
       return NextResponse.json(
@@ -131,12 +133,37 @@ export async function DELETE() {
       );
     }
 
-    console.log('🗑️ Clearing all chunk classifications...');
+    console.log('🗑️ Starting to clear all chunk classifications...');
+    const logStart = Date.now();
 
-    const result = await query<{ count: string }>('UPDATE chunks SET subject = NULL RETURNING id');
+    // First, count how many chunks are classified (for logging)
+    console.log('   📊 Counting classified chunks...');
+    const countStart = Date.now();
+    const countResult = await query<{ count: string }>(
+      'SELECT COUNT(*) as count FROM chunks WHERE subject IS NOT NULL'
+    );
+    const classifiedCount = parseInt(countResult.rows[0].count, 10);
+    const countDuration = Date.now() - countStart;
+    console.log(`   ✅ Found ${classifiedCount} classified chunks (took ${countDuration}ms)`);
+
+    if (classifiedCount === 0) {
+      console.log('   ℹ️ No chunks to clear');
+      return NextResponse.json({
+        status: 'success',
+        cleared: 0,
+        message: 'No chunks were classified. Nothing to clear.',
+      });
+    }
+
+    // Now clear all classifications (UPDATE without RETURNING is faster)
+    console.log(`   🔄 Clearing ${classifiedCount} classifications...`);
+    const updateStart = Date.now();
+    const result = await query('UPDATE chunks SET subject = NULL');
+    const updateDuration = Date.now() - updateStart;
     const clearedCount = result.rowCount || 0;
 
-    console.log(`✅ Cleared ${clearedCount} classifications`);
+    const totalDuration = Date.now() - startTime;
+    console.log(`✅ Cleared ${clearedCount} classifications in ${totalDuration}ms (count: ${countDuration}ms, update: ${updateDuration}ms)`);
 
     return NextResponse.json({
       status: 'success',
@@ -144,7 +171,8 @@ export async function DELETE() {
       message: `Cleared ${clearedCount} chunk classifications.`,
     });
   } catch (error) {
-    console.error('❌ Failed to clear classifications:', error);
+    const totalDuration = Date.now() - startTime;
+    console.error(`❌ Failed to clear classifications after ${totalDuration}ms:`, error);
     return NextResponse.json(
       {
         error: 'Failed to clear classifications',
