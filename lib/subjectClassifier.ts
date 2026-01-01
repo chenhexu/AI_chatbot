@@ -35,7 +35,7 @@ function getGeminiClient(): GoogleGenerativeAI {
  */
 export async function classifyChunkSubject(text: string): Promise<Subject> {
   const client = getGeminiClient();
-  const model = client.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+  const model = client.getGenerativeModel({ model: 'gemini-2.5-flash' });
   
   // Take first 500 chars for classification (fast)
   const preview = text.substring(0, 500);
@@ -77,7 +77,7 @@ Respond with ONLY the category name, nothing else.`;
  */
 export async function classifyQuerySubject(query: string): Promise<Subject[]> {
   const client = getGeminiClient();
-  const model = client.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+  const model = client.getGenerativeModel({ model: 'gemini-2.5-flash' });
   
   const prompt = `A user asked: "${query}"
 
