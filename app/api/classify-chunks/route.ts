@@ -38,9 +38,13 @@ export async function POST() {
 
     console.log('🧠 Starting chunk classification...');
 
-    // Get all unclassified chunks
+    // Reduce batch size to 5 to respect free tier rate limit (5 requests/minute)
+    const BATCH_SIZE = 5;
+    const DELAY_BETWEEN_REQUESTS_MS = 13000; // 13 seconds between requests (60s / 5 = 12s, add 1s buffer)
+
+    // Get unclassified chunks (limit to batch size to respect rate limits)
     const unclassified = await query<{ id: number; text: string }>(
-      'SELECT id, text FROM chunks WHERE subject IS NULL LIMIT 100'
+      `SELECT id, text FROM chunks WHERE subject IS NULL LIMIT ${BATCH_SIZE}`
     );
 
     if (unclassified.rows.length === 0) {
@@ -51,33 +55,57 @@ export async function POST() {
       });
     }
 
-    console.log(`📊 Found ${unclassified.rows.length} unclassified chunks`);
+    console.log(`📊 Found ${unclassified.rows.length} unclassified chunks (processing ${BATCH_SIZE} per batch to respect rate limits)`);
 
     let classified = 0;
-    for (const chunk of unclassified.rows) {
+    let errors = 0;
+
+    for (let i = 0; i < unclassified.rows.length; i++) {
+      const chunk = unclassified.rows[i];
+      
+      // Add delay between requests (except for the first one)
+      if (i > 0) {
+        console.log(`   ⏳ Waiting ${DELAY_BETWEEN_REQUESTS_MS / 1000}s to respect rate limits...`);
+        await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_REQUESTS_MS));
+      }
+
       try {
         const subject = await classifyChunkSubject(chunk.text);
         await query('UPDATE chunks SET subject = $1 WHERE id = $2', [subject, chunk.id]);
         classified++;
+        console.log(`   ✅ Classified chunk ${chunk.id} as "${subject}" (${classified}/${unclassified.rows.length})`);
+      } catch (error: any) {
+        errors++;
+        const errorMsg = error instanceof Error ? error.message : String(error);
         
-        if (classified % 10 === 0) {
-          console.log(`   📊 Classified ${classified}/${unclassified.rows.length} chunks...`);
+        // Check if it's a rate limit error
+        if (errorMsg.includes('429') || errorMsg.includes('quota') || errorMsg.includes('rate limit')) {
+          console.error(`   ⚠️ Rate limit hit for chunk ${chunk.id}, stopping batch. Please wait and try again.`);
+          // Don't mark as 'other', leave it unclassified so it can be retried
+          break; // Stop processing this batch
+        } else {
+          console.error(`   ❌ Failed to classify chunk ${chunk.id}:`, errorMsg);
+          // For non-rate-limit errors, mark as 'other' to avoid retrying
+          await query('UPDATE chunks SET subject = $1 WHERE id = $2', ['other', chunk.id]);
+          classified++;
         }
-      } catch (error) {
-        console.error(`   ❌ Failed to classify chunk ${chunk.id}:`, error);
-        // Mark as 'other' to avoid retrying
-        await query('UPDATE chunks SET subject = $1 WHERE id = $2', ['other', chunk.id]);
-        classified++;
       }
     }
 
-    console.log(`✅ Classification complete! Classified ${classified} chunks`);
+    console.log(`✅ Classification batch complete! Classified ${classified} chunks, ${errors} errors`);
+
+    // Calculate remaining
+    const remainingResult = await query<{ count: string }>('SELECT COUNT(*) as count FROM chunks WHERE subject IS NULL');
+    const remaining = parseInt(remainingResult.rows[0].count, 10);
 
     return NextResponse.json({
       status: 'success',
       classified,
-      remaining: unclassified.rows.length - classified,
-      message: `Classified ${classified} chunks. Run again to classify more.`,
+      remaining,
+      batchSize: BATCH_SIZE,
+      message: remaining > 0 
+        ? `Classified ${classified} chunks. ${remaining} remaining. Run again to classify more (${BATCH_SIZE} per batch due to rate limits).`
+        : `Classified ${classified} chunks. All chunks are now classified!`,
     });
   } catch (error) {
     console.error('❌ Classification failed:', error);
