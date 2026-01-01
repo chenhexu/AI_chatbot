@@ -246,7 +246,7 @@ async function generateGeminiChatResponse(
 ): Promise<string> {
   const logPrefix = requestId ? `[${requestId}]` : '';
   const client = getGeminiClient();
-  const model = client.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const model = client.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
   
   // Find relevant chunks using both original and translated query
   const relevantChunks = findRelevantChunks(documentChunks, userMessage, 6);
@@ -287,7 +287,7 @@ User question: ${userMessage}
 Answer:`;
 
   try {
-    console.log(`${logPrefix} 🤖 Calling Gemini (gemini-1.5-flash)`);
+    console.log(`${logPrefix} 🤖 Calling Gemini (gemini-2.0-flash-exp)`);
     
     // Add timeout
     const timeoutMs = 25000;
