@@ -92,6 +92,42 @@ export async function POST() {
 }
 
 /**
+ * DELETE /api/classify-chunks - Clear all classifications (set subject to NULL)
+ */
+export async function DELETE() {
+  try {
+    if (!process.env.DATABASE_URL) {
+      return NextResponse.json(
+        { error: 'DATABASE_URL not set', status: 'not_configured' },
+        { status: 400 }
+      );
+    }
+
+    console.log('🗑️ Clearing all chunk classifications...');
+
+    const result = await query<{ count: string }>('UPDATE chunks SET subject = NULL RETURNING id');
+    const clearedCount = result.rowCount || 0;
+
+    console.log(`✅ Cleared ${clearedCount} classifications`);
+
+    return NextResponse.json({
+      status: 'success',
+      cleared: clearedCount,
+      message: `Cleared ${clearedCount} chunk classifications.`,
+    });
+  } catch (error) {
+    console.error('❌ Failed to clear classifications:', error);
+    return NextResponse.json(
+      {
+        error: 'Failed to clear classifications',
+        details: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 }
+    );
+  }
+}
+
+/**
  * GET /api/classify-chunks - Check classification status
  */
 export async function GET() {

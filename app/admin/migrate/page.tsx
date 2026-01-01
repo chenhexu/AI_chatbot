@@ -48,7 +48,7 @@ export default function MigratePage() {
   const [skippedFiles, setSkippedFiles] = useState<SkippedFile[]>([]);
   const [skippedChunksCount, setSkippedChunksCount] = useState<number>(0);
   const [splitChunksCount, setSplitChunksCount] = useState<number>(0);
-  const [classifyStatus, setClassifyStatus] = useState<'idle' | 'checking' | 'classifying' | 'success' | 'error'>('idle');
+  const [classifyStatus, setClassifyStatus] = useState<'idle' | 'checking' | 'classifying' | 'clearing' | 'success' | 'error'>('idle');
   const [classifyMessage, setClassifyMessage] = useState<string>('');
   const [classifyStats, setClassifyStats] = useState<{ total: number; classified: number; unclassified: number; percentage: number } | null>(null);
 
@@ -205,6 +205,36 @@ export default function MigratePage() {
       } else {
         setClassifyStatus('error');
         setClassifyMessage(data.error || data.message || 'Classification failed');
+      }
+    } catch (error) {
+      setClassifyStatus('error');
+      setClassifyMessage(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  const clearClassification = async () => {
+    if (!confirm('Are you sure you want to clear all chunk classifications? This cannot be undone.')) {
+      return;
+    }
+
+    setClassifyStatus('clearing');
+    setClassifyMessage('Clearing classifications...');
+
+    try {
+      const response = await fetch('/api/classify-chunks', {
+        method: 'DELETE',
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.status === 'success') {
+        setClassifyStatus('success');
+        setClassifyMessage(data.message);
+        // Refresh status
+        await checkClassificationStatus();
+      } else {
+        setClassifyStatus('error');
+        setClassifyMessage(data.error || data.message || 'Failed to clear classifications');
       }
     } catch (error) {
       setClassifyStatus('error');
@@ -472,13 +502,24 @@ export default function MigratePage() {
                       </p>
                     )}
                   </div>
-                  <button
-                    onClick={runClassification}
-                    disabled={classifyStatus === 'classifying' || classifyStatus === 'checking'}
-                    className="px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                  >
-                    {classifyStatus === 'classifying' ? 'Classifying...' : '🧠 Classify Chunks'}
-                  </button>
+                  <div className="flex gap-2">
+                    {classifyStats && classifyStats.classified > 0 && (
+                      <button
+                        onClick={clearClassification}
+                        disabled={classifyStatus === 'clearing' || classifyStatus === 'classifying' || classifyStatus === 'checking'}
+                        className="px-4 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                      >
+                        {classifyStatus === 'clearing' ? 'Clearing...' : '🗑️ Clear'}
+                      </button>
+                    )}
+                    <button
+                      onClick={runClassification}
+                      disabled={classifyStatus === 'classifying' || classifyStatus === 'clearing' || classifyStatus === 'checking'}
+                      className="px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                    >
+                      {classifyStatus === 'classifying' ? 'Classifying...' : '🧠 Classify Chunks'}
+                    </button>
+                  </div>
                 </div>
                 {classifyMessage && (
                   <p className={`text-sm ${

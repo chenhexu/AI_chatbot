@@ -31,11 +31,18 @@ function getGeminiClient(): GoogleGenerativeAI {
 }
 
 /**
+ * Get Gemini model name from environment variable, with fallback
+ */
+function getGeminiModel(): string {
+  return process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+}
+
+/**
  * Classify a chunk's subject using Gemini (fast, free)
  */
 export async function classifyChunkSubject(text: string): Promise<Subject> {
   const client = getGeminiClient();
-  const model = client.getGenerativeModel({ model: 'gemini-2.5-flash' });
+  const model = client.getGenerativeModel({ model: getGeminiModel() });
   
   // Take first 500 chars for classification (fast)
   const preview = text.substring(0, 500);
@@ -77,7 +84,7 @@ Respond with ONLY the category name, nothing else.`;
  */
 export async function classifyQuerySubject(query: string): Promise<Subject[]> {
   const client = getGeminiClient();
-  const model = client.getGenerativeModel({ model: 'gemini-2.5-flash' });
+  const model = client.getGenerativeModel({ model: getGeminiModel() });
   
   const prompt = `A user asked: "${query}"
 

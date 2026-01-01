@@ -31,6 +31,13 @@ function getGeminiClient(): GoogleGenerativeAI {
 }
 
 /**
+ * Get Gemini model name from environment variable, with fallback
+ */
+function getGeminiModel(): string {
+  return process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+}
+
+/**
  * Translate query to French for better matching with French documents
  * Uses free Google Translate API (no API key needed) or OpenAI if preferred
  */
@@ -246,7 +253,7 @@ async function generateGeminiChatResponse(
 ): Promise<string> {
   const logPrefix = requestId ? `[${requestId}]` : '';
   const client = getGeminiClient();
-  const model = client.getGenerativeModel({ model: 'gemini-2.5-flash' });
+  const model = client.getGenerativeModel({ model: getGeminiModel() });
   
   // Find relevant chunks using both original and translated query
   const relevantChunks = findRelevantChunks(documentChunks, userMessage, 6);
@@ -287,7 +294,7 @@ User question: ${userMessage}
 Answer:`;
 
   try {
-    console.log(`${logPrefix} 🤖 Calling Gemini (gemini-2.5-flash)`);
+    console.log(`${logPrefix} 🤖 Calling Gemini (${getGeminiModel()})`);
     
     // Add timeout
     const timeoutMs = 25000;
