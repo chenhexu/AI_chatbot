@@ -150,20 +150,26 @@ export async function POST(request: NextRequest) {
 
     console.log(`[${requestId}] 📨 Received query: "${message}" (provider: ${provider})`);
 
-    // Step 1: Classify query subject (fast Gemini call ~300ms)
-    console.log(`[${requestId}] 🧠 Classifying query subject...`);
+    // Step 1: Classify query subject (fast Gemini call ~300ms) - can be disabled via env var
+    const enableSubjectFilter = process.env.ENABLE_SUBJECT_FILTER !== 'false';
     let querySubjects: string[] = [];
-    try {
-      querySubjects = await classifyQuerySubject(message);
-      console.log(`[${requestId}] ✅ Query subjects: ${querySubjects.join(', ')}`);
-    } catch (error) {
-      console.error(`[${requestId}] ⚠️ Subject classification failed, using all chunks:`, error);
-      querySubjects = []; // Fallback to all chunks
+    
+    if (enableSubjectFilter) {
+      console.log(`[${requestId}] 🧠 Classifying query subject...`);
+      try {
+        querySubjects = await classifyQuerySubject(message);
+        console.log(`[${requestId}] ✅ Query subjects: ${querySubjects.join(', ')}`);
+      } catch (error) {
+        console.error(`[${requestId}] ⚠️ Subject classification failed, using all chunks:`, error);
+        querySubjects = []; // Fallback to all chunks
+      }
+    } else {
+      console.log(`[${requestId}] ⏭️ Subject classification disabled (ENABLE_SUBJECT_FILTER=false), using all chunks`);
     }
 
     // Step 2: Load chunks filtered by subject (much faster!)
     let chunks: TextChunk[];
-    if (process.env.DATABASE_URL && querySubjects.length > 0) {
+    if (process.env.DATABASE_URL && querySubjects.length > 0 && enableSubjectFilter) {
       // Try to load from database with subject filter
       try {
         chunks = await loadAllChunks(querySubjects);

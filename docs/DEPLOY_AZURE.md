@@ -61,6 +61,9 @@ Azure App Service offers a free tier with 1 CPU core and no timeout limits, maki
 
    **Optional:**
    - `OPENAI_MODEL` = `gpt-4o-mini` (optional, defaults to this)
+   - `ENABLE_SUBJECT_FILTER` = `true` or `false` (optional, defaults to `true`)
+     - Set to `false` to disable category/subject filtering in RAG search
+     - Useful for testing performance without classification overhead
    - `PORT` = `8080` (Azure sets this automatically, but you can override)
 
 4. Click **"Save"** (this will restart your app)
