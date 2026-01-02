@@ -33,7 +33,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: node-app
-          path: .
+          path: |
+            .
+            !.git
+            !node_modules
+          retention-days: 1
 
   deploy:
     runs-on: ubuntu-latest
@@ -62,4 +66,5 @@ jobs:
           app-name: 'ai-chatbot-chenhexu'
           slot-name: 'Production'
           package: .
+          startup-command: 'npm start'
           
