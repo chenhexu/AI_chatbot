@@ -1,7 +1,14 @@
-import sys
-sys.stdout.reconfigure(encoding="utf-8")
-up = "\u0300\u0301\u0302\u0303" * 100
-down = "\u0323\u0324\u0325\u0326" * 100
-mid = "\u0338\u0337" * 100
+from google import genai
+from PIL import Image
 
-print("A" + up + mid + down)
+client = genai.Client()
+
+response = client.models.generate_content(
+    model="gemini-2.5-flash-image",
+    contents="Create a picture of a futuristic banana with neon lights in a cyberpunk city.",
+)
+
+for part in response.parts:
+    if part.inline_data:
+        image = part.as_image()
+        image.show()
