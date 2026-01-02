@@ -29,6 +29,12 @@ jobs:
           npm run build --if-present
           npm run test --if-present
 
+      - name: Verify .next folder exists
+        run: |
+          ls -la .next || echo ".next folder not found"
+          ls -la .next/standalone 2>/dev/null || echo "No standalone folder"
+          ls -la .next/static 2>/dev/null || echo "No static folder"
+      
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
@@ -38,6 +44,7 @@ jobs:
             !.git
             !node_modules
           retention-days: 1
+          if-no-files-found: error
 
   deploy:
     runs-on: ubuntu-latest
@@ -51,6 +58,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: node-app
+      
+      - name: Verify .next folder in artifact
+        run: |
+          ls -la .next || echo ".next folder not found in artifact"
+          ls -la .next/standalone 2>/dev/null || echo "No standalone folder"
+          ls -la .next/static 2>/dev/null || echo "No static folder"
       
       - name: Login to Azure
         uses: azure/login@v2
