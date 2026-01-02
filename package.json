@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "npx next start",
     "lint": "next lint",
     "test-rag": "tsx test-rag.ts",
     "test-recipe": "tsx test-recipe-query.ts",
@@ -22,7 +22,7 @@
     "@types/pg": "^8.16.0",
     "@vitalets/google-translate-api": "^9.2.1",
     "canvas": "^3.2.0",
-    "cheerio": "^1.0.0",
+    "cheerio": "^1.1.2",
     "dotenv": "^16.4.7",
     "fast-levenshtein": "^3.0.0",
     "googleapis": "^144.0.0",
@@ -50,5 +50,9 @@
     "tailwindcss": "^3.4.17",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3"
+  },
+  "overrides": {
+    "node-domexception": "^2.0.2",
+    "whatwg-encoding": "^3.1.1"
   }
 }
