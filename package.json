@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "node node_modules/.bin/next start",
+    "start": "node /node_modules/.bin/next start",
     "lint": "next lint",
     "test-rag": "tsx test-rag.ts",
     "test-recipe": "tsx test-recipe-query.ts",
