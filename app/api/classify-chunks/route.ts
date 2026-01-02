@@ -126,7 +126,6 @@ export async function POST() {
         classified++;
         console.log(`   ✅ Classified chunk ${chunk.id} as "${subject}" (${classified}/${unclassified.rows.length})`);
       } catch (error: any) {
-        errors++;
         const errorMsg = error instanceof Error ? error.message : String(error);
         const errorFull = JSON.stringify(error);
         
@@ -152,19 +151,23 @@ export async function POST() {
               
               classified++;
               console.log(`   ✅ Classified chunk ${chunk.id} as "${subject}" after retry (${classified}/${unclassified.rows.length})`);
+              // Don't increment errors - retry succeeded!
             } catch (retryError: any) {
-              // Retry also failed, store in failed_classifications
+              // Retry also failed, count as error and store in failed_classifications
+              errors++;
               const retryErrorMsg = retryError instanceof Error ? retryError.message : String(retryError);
               console.error(`   ❌ Retry failed for chunk ${chunk.id}, storing in failed classifications:`, retryErrorMsg);
               await storeFailedClassification(chunk.id, `Rate limit retry failed: ${retryErrorMsg}`);
             }
           } else {
-            // Can't extract delay, store as failed
+            // Can't extract delay, count as error and store as failed
+            errors++;
             console.error(`   ⚠️ Rate limit hit for chunk ${chunk.id} but couldn't extract retry delay, storing as failed`);
             await storeFailedClassification(chunk.id, errorMsg);
           }
         } else {
-          // Non-rate-limit error, store as failed
+          // Non-rate-limit error, count as error and store as failed
+          errors++;
           console.error(`   ❌ Failed to classify chunk ${chunk.id}:`, errorMsg);
           await storeFailedClassification(chunk.id, errorMsg);
         }
