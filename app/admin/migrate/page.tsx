@@ -55,6 +55,14 @@ export default function MigratePage() {
   const [showFailedChunks, setShowFailedChunks] = useState(false);
   const [retryStatus, setRetryStatus] = useState<'idle' | 'retrying' | 'success' | 'error'>('idle');
   const [retryMessage, setRetryMessage] = useState<string>('');
+  const [dbMigrateStatus, setDbMigrateStatus] = useState<'idle' | 'migrating' | 'success' | 'error'>('idle');
+  const [dbMigrateMessage, setDbMigrateMessage] = useState<string>('');
+  const [dbMigrateSummary, setDbMigrateSummary] = useState<{
+    render: { documents: number; chunks: number };
+    migrated: { documents: number; chunks: number };
+    skipped: { documents: number; chunks: number };
+    azure: { documents: number; chunks: number };
+  } | null>(null);
 
   const checkStatus = async () => {
     try {
@@ -338,6 +346,41 @@ export default function MigratePage() {
     } catch (error) {
       setStatus('error');
       setMessage(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  const migrateDatabase = async () => {
+    if (!confirm('This will migrate all data from Render database to Azure database. Make sure you have set RENDER_DATABASE_URL and AZURE_DATABASE_URL environment variables. Continue?')) {
+      return;
+    }
+
+    setDbMigrateStatus('migrating');
+    setDbMigrateMessage('Migrating data from Render to Azure... This may take a few minutes.');
+    setDbMigrateSummary(null);
+
+    try {
+      const response = await fetch('/api/migrate-database', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setDbMigrateStatus('success');
+        setDbMigrateMessage('Database migration completed successfully!');
+        setDbMigrateSummary(data.summary);
+        // Refresh status
+        await checkStatus();
+      } else {
+        setDbMigrateStatus('error');
+        setDbMigrateMessage(data.error || 'Database migration failed');
+      }
+    } catch (error) {
+      setDbMigrateStatus('error');
+      setDbMigrateMessage(`Error: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
 
@@ -682,6 +725,43 @@ export default function MigratePage() {
                 }`}>
                   {clearMessage}
                 </p>
+              )}
+            </div>
+
+            {/* Database Migration (Render → Azure) */}
+            <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-4">
+              <h3 className="text-sm font-semibold text-cyan-800 mb-2">🔄 Database Migration (Render → Azure)</h3>
+              <p className="text-xs text-cyan-700 mb-3">
+                Migrate all data from Render PostgreSQL to Azure PostgreSQL. Requires RENDER_DATABASE_URL and AZURE_DATABASE_URL environment variables.
+              </p>
+              <button
+                onClick={migrateDatabase}
+                disabled={dbMigrateStatus === 'migrating'}
+                className="px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+              >
+                {dbMigrateStatus === 'migrating' ? 'Migrating...' : 'Migrate Database (Render → Azure)'}
+              </button>
+              {dbMigrateMessage && (
+                <p className={`text-xs mt-2 ${
+                  dbMigrateStatus === 'success' ? 'text-green-700' :
+                  dbMigrateStatus === 'error' ? 'text-red-700' :
+                  'text-cyan-700'
+                }`}>
+                  {dbMigrateMessage}
+                </p>
+              )}
+              {dbMigrateSummary && (
+                <div className="mt-3 text-xs space-y-1">
+                  <div className="bg-white rounded p-2 border border-cyan-100">
+                    <p className="font-semibold text-cyan-800 mb-1">Migration Summary:</p>
+                    <p className="text-cyan-700">Render: {dbMigrateSummary.render.documents} docs, {dbMigrateSummary.render.chunks} chunks</p>
+                    <p className="text-green-700">Migrated: {dbMigrateSummary.migrated.documents} docs, {dbMigrateSummary.migrated.chunks} chunks</p>
+                    {(dbMigrateSummary.skipped.documents > 0 || dbMigrateSummary.skipped.chunks > 0) && (
+                      <p className="text-yellow-700">Skipped: {dbMigrateSummary.skipped.documents} docs, {dbMigrateSummary.skipped.chunks} chunks</p>
+                    )}
+                    <p className="text-cyan-700">Azure Total: {dbMigrateSummary.azure.documents} docs, {dbMigrateSummary.azure.chunks} chunks</p>
+                  </div>
+                </div>
               )}
             </div>
 
