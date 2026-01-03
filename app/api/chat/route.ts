@@ -191,6 +191,18 @@ export async function POST(request: NextRequest) {
       console.log(`[${requestId}] 🔍 Loaded ${chunks.length} chunks (no subject filter)`);
     }
 
+    // Warn if no chunks available
+    if (chunks.length === 0) {
+      console.error(`[${requestId}] ❌ CRITICAL: No chunks loaded! Database might be empty or connection failed.`);
+      return NextResponse.json(
+        { 
+          error: 'No documents available. Please check database connection and ensure documents are migrated.',
+          details: 'The database appears to be empty or not connected. Visit /admin/migrate to upload documents.'
+        },
+        { status: 503 }
+      );
+    }
+
     // Step 3: Generate response using selected AI provider with RAG
     const response = await generateChatResponse(message, chunks, requestId, provider);
 
