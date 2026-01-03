@@ -9,81 +9,115 @@ import { classifyChunkSubject } from '@/lib/subjectClassifier';
  */
 function extractRetryDelay(error: any): number | null {
   try {
-    // First, try to find retryDelay in the error message string
-    const errorStr = error?.message || error?.toString() || JSON.stringify(error);
+    // Log full error structure for debugging (first time only)
+    if (!extractRetryDelay._logged) {
+      console.log(`   🔍 Full error structure:`, {
+        type: typeof error,
+        constructor: error?.constructor?.name,
+        keys: error ? Object.keys(error) : [],
+        message: error?.message?.substring(0, 500),
+        stack: error?.stack?.substring(0, 500),
+        errorDetails: error?.errorDetails,
+        error: error?.error,
+        status: error?.status,
+        statusText: error?.statusText,
+        cause: error?.cause,
+      });
+      try {
+        const errorJson = JSON.stringify(error, null, 2);
+        console.log(`   🔍 Error as JSON (first 2000 chars):`, errorJson.substring(0, 2000));
+      } catch (e) {
+        console.log(`   🔍 Could not stringify error:`, e);
+      }
+      extractRetryDelay._logged = true;
+    }
     
-    // Look for "Please retry in X.XXs" pattern
+    // First, try to find retryDelay in the error message string
+    const errorStr = error?.message || error?.toString() || '';
+    
+    // Look for "Please retry in X.XXs" pattern (most common)
     const retryMatch = errorStr.match(/Please retry in ([\d.]+)s/i);
     if (retryMatch) {
       const seconds = parseFloat(retryMatch[1]);
-      console.log(`   🔍 Extracted retry delay from message: ${seconds}s`);
+      console.log(`   ✅ Extracted retry delay from message: ${seconds}s`);
       return Math.ceil(seconds * 1000) + 1000; // Convert to ms and add 1 second buffer
     }
     
-    // Look for "retryDelay":"Xs" pattern in JSON
-    const jsonMatch = errorStr.match(/"retryDelay"\s*:\s*"([\d.]+)s"/i);
-    if (jsonMatch) {
-      const seconds = parseFloat(jsonMatch[1]);
-      console.log(`   🔍 Extracted retry delay from JSON: ${seconds}s`);
-      return Math.ceil(seconds * 1000) + 1000;
-    }
-    
-    // Check errorDetails array for RetryInfo
+    // Check errorDetails array for RetryInfo (Google API format)
     if (error?.errorDetails && Array.isArray(error.errorDetails)) {
-      const retryInfo = error.errorDetails.find((d: any) => 
-        d['@type']?.includes('RetryInfo') || d['@type']?.includes('retry')
-      );
-      if (retryInfo?.retryDelay) {
-        // retryDelay might be "31s" or a number
-        const delayStr = String(retryInfo.retryDelay);
-        const secondsMatch = delayStr.match(/([\d.]+)s?/);
-        if (secondsMatch) {
-          const seconds = parseFloat(secondsMatch[1]);
-          console.log(`   🔍 Extracted retry delay from errorDetails: ${seconds}s`);
-          return Math.ceil(seconds * 1000) + 1000;
+      for (const detail of error.errorDetails) {
+        if (detail?.['@type']?.includes('RetryInfo') || detail?.['@type']?.includes('retry')) {
+          if (detail?.retryDelay) {
+            const delayStr = String(detail.retryDelay);
+            const secondsMatch = delayStr.match(/([\d.]+)s?/);
+            if (secondsMatch) {
+              const seconds = parseFloat(secondsMatch[1]);
+              console.log(`   ✅ Extracted retry delay from errorDetails: ${seconds}s`);
+              return Math.ceil(seconds * 1000) + 1000;
+            }
+          }
         }
       }
     }
     
     // Check nested error structure (error.error might contain errorDetails)
-    if (error?.error?.errorDetails && Array.isArray(error.error.errorDetails)) {
-      const retryInfo = error.error.errorDetails.find((d: any) => 
-        d['@type']?.includes('RetryInfo') || d['@type']?.includes('retry')
-      );
-      if (retryInfo?.retryDelay) {
-        const delayStr = String(retryInfo.retryDelay);
-        const secondsMatch = delayStr.match(/([\d.]+)s?/);
-        if (secondsMatch) {
-          const seconds = parseFloat(secondsMatch[1]);
-          console.log(`   🔍 Extracted retry delay from nested error: ${seconds}s`);
-          return Math.ceil(seconds * 1000) + 1000;
+    if (error?.error) {
+      if (error.error?.errorDetails && Array.isArray(error.error.errorDetails)) {
+        for (const detail of error.error.errorDetails) {
+          if (detail?.['@type']?.includes('RetryInfo') || detail?.['@type']?.includes('retry')) {
+            if (detail?.retryDelay) {
+              const delayStr = String(detail.retryDelay);
+              const secondsMatch = delayStr.match(/([\d.]+)s?/);
+              if (secondsMatch) {
+                const seconds = parseFloat(secondsMatch[1]);
+                console.log(`   ✅ Extracted retry delay from nested error.errorDetails: ${seconds}s`);
+                return Math.ceil(seconds * 1000) + 1000;
+              }
+            }
+          }
         }
       }
     }
     
-    // Last resort: search the entire error object as JSON string
+    // Search the entire error object as JSON string (last resort)
     try {
       const fullErrorStr = JSON.stringify(error);
-      const fullJsonMatch = fullErrorStr.match(/"retryDelay"\s*:\s*"([\d.]+)s"/i);
-      if (fullJsonMatch) {
-        const seconds = parseFloat(fullJsonMatch[1]);
-        console.log(`   🔍 Extracted retry delay from full JSON: ${seconds}s`);
+      
+      // Look for "retryDelay":"Xs" pattern in JSON
+      const jsonMatch = fullErrorStr.match(/"retryDelay"\s*:\s*"([\d.]+)s"/i);
+      if (jsonMatch) {
+        const seconds = parseFloat(jsonMatch[1]);
+        console.log(`   ✅ Extracted retry delay from full JSON: ${seconds}s`);
+        return Math.ceil(seconds * 1000) + 1000;
+      }
+      
+      // Also try without quotes: "retryDelay": "22s" or retryDelay: "22s"
+      const jsonMatch2 = fullErrorStr.match(/retryDelay["\s]*:["\s]*([\d.]+)s/i);
+      if (jsonMatch2) {
+        const seconds = parseFloat(jsonMatch2[1]);
+        console.log(`   ✅ Extracted retry delay from JSON (variant 2): ${seconds}s`);
         return Math.ceil(seconds * 1000) + 1000;
       }
     } catch (e) {
       // Ignore JSON stringify errors
     }
     
-    console.log(`   ⚠️ Could not extract retry delay from error. Error structure:`, {
+    console.log(`   ⚠️ Could not extract retry delay from error. Error structure summary:`, {
       hasErrorDetails: !!error?.errorDetails,
+      errorDetailsLength: error?.errorDetails?.length,
       hasError: !!error?.error,
-      message: error?.message?.substring(0, 200),
+      hasMessage: !!error?.message,
+      messagePreview: error?.message?.substring(0, 200),
+      status: error?.status,
     });
   } catch (e) {
     console.error(`   ❌ Error extracting retry delay:`, e);
   }
   return null;
 }
+
+// Add a flag to prevent logging the same error structure multiple times
+extractRetryDelay._logged = false;
 
 /**
  * Store failed classification in database
@@ -189,14 +223,8 @@ export async function POST() {
                            errorMsg.includes('Too Many Requests');
         
         if (isRateLimit) {
-          // Log the full error structure for debugging
-          console.log(`   🔍 Rate limit error detected for chunk ${chunk.id}. Error structure:`, {
-            message: errorMsg?.substring(0, 300),
-            hasErrorDetails: !!error?.errorDetails,
-            hasError: !!error?.error,
-            status: error?.status,
-            statusText: error?.statusText,
-          });
+          // Reset the logging flag for each new error
+          extractRetryDelay._logged = false;
           
           // Extract retry delay from error
           const retryDelay = extractRetryDelay(error);
