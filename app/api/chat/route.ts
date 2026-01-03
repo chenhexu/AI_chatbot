@@ -5,12 +5,37 @@ import { generateChatResponse } from '@/lib/openai';
 import { loadAllChunks } from '@/lib/database/documentStore';
 import { query } from '@/lib/database/client';
 import { classifyQuerySubject } from '@/lib/subjectClassifier';
+import os from 'os';
 
 // Cache document chunks in memory (in production, consider using Redis or similar)
 let cachedChunks: TextChunk[] | null = null;
 let chunksLastFetched: number = 0;
 const CACHE_DURATION = 60 * 60 * 1000; // 1 hour in milliseconds
 let isLoadingDocuments = false; // Prevent concurrent loading
+
+/**
+ * Log CPU usage with a label
+ */
+function logCpuUsage(requestId: string, label: string, startCpu?: NodeJS.CpuUsage): NodeJS.CpuUsage {
+  const currentCpu = process.cpuUsage();
+  const cpus = os.cpus();
+  const numCores = cpus.length;
+  
+  if (startCpu) {
+    // Calculate delta
+    const userDelta = (currentCpu.user - startCpu.user) / 1000; // Convert to ms
+    const systemDelta = (currentCpu.system - startCpu.system) / 1000;
+    const totalDelta = userDelta + systemDelta;
+    
+    console.log(`[${requestId}] 💻 CPU [${label}]: ${totalDelta.toFixed(2)}ms (user: ${userDelta.toFixed(2)}ms, system: ${systemDelta.toFixed(2)}ms) | Cores: ${numCores}`);
+  } else {
+    // Just log current state
+    const totalMs = (currentCpu.user + currentCpu.system) / 1000;
+    console.log(`[${requestId}] 💻 CPU [${label}]: ${totalMs.toFixed(2)}ms total | Cores: ${numCores}`);
+  }
+  
+  return currentCpu;
+}
 
 /**
  * Preload document chunks (call this on app startup)
@@ -137,6 +162,10 @@ export async function POST(request: NextRequest) {
   // Generate a short request ID for logging
   const requestId = Math.random().toString(36).substring(2, 8);
   
+  // Track CPU usage throughout the request
+  const requestStartCpu = process.cpuUsage();
+  const requestStartTime = Date.now();
+  
   try {
     const body = await request.json();
     const { message, provider = 'openai' } = body;
@@ -149,17 +178,21 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`[${requestId}] 📨 Received query: "${message}" (provider: ${provider})`);
+    logCpuUsage(requestId, 'Request Start');
 
     // Step 1: Classify query subject (fast Gemini call ~300ms) - can be disabled via env var
     const enableSubjectFilter = process.env.ENABLE_SUBJECT_FILTER !== 'false';
     let querySubjects: string[] = [];
     
     if (enableSubjectFilter) {
+      const subjectStartCpu = process.cpuUsage();
       console.log(`[${requestId}] 🧠 Classifying query subject...`);
       try {
         querySubjects = await classifyQuerySubject(message);
+        logCpuUsage(requestId, 'Subject Classification', subjectStartCpu);
         console.log(`[${requestId}] ✅ Query subjects: ${querySubjects.join(', ')}`);
       } catch (error) {
+        logCpuUsage(requestId, 'Subject Classification (failed)', subjectStartCpu);
         console.error(`[${requestId}] ⚠️ Subject classification failed, using all chunks:`, error);
         querySubjects = []; // Fallback to all chunks
       }
@@ -168,6 +201,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Step 2: Load chunks filtered by subject (much faster!)
+    const chunkLoadStartCpu = process.cpuUsage();
+    const chunkLoadStartTime = Date.now();
     let chunks: TextChunk[];
     if (process.env.DATABASE_URL && querySubjects.length > 0 && enableSubjectFilter) {
       // Try to load from database with subject filter
@@ -190,6 +225,8 @@ export async function POST(request: NextRequest) {
       chunks = await getDocumentChunks();
       console.log(`[${requestId}] 🔍 Loaded ${chunks.length} chunks (no subject filter)`);
     }
+    const chunkLoadTime = Date.now() - chunkLoadStartTime;
+    logCpuUsage(requestId, `Chunk Loading (${chunks.length} chunks, ${chunkLoadTime}ms)`, chunkLoadStartCpu);
 
     // Warn if no chunks available
     if (chunks.length === 0) {
@@ -204,7 +241,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Step 3: Generate response using selected AI provider with RAG
+    const ragStartCpu = process.cpuUsage();
+    const ragStartTime = Date.now();
     const response = await generateChatResponse(message, chunks, requestId, provider);
+    const ragTime = Date.now() - ragStartTime;
+    logCpuUsage(requestId, `RAG + AI Response (${ragTime}ms)`, ragStartCpu);
+    
+    // Final summary
+    const totalTime = Date.now() - requestStartTime;
+    logCpuUsage(requestId, `Total Request (${totalTime}ms)`, requestStartCpu);
+    console.log(`[${requestId}] ✅ Request completed in ${totalTime}ms`);
 
     return NextResponse.json({ response, provider });
   } catch (error) {

@@ -793,12 +793,22 @@ export function findRelevantChunks(
   query: string,
   maxChunks: number = 5
 ): TextChunk[] {
+  const similarityStartCpu = process.cpuUsage();
+  const similarityStartTime = Date.now();
+  
   // Calculate similarity scores
   const scoredChunks = chunks.map((chunk, originalIndex) => ({
     chunk,
     originalIndex,
     score: calculateSimilarity(query, chunk.text, chunk.source),
   }));
+  
+  const similarityTime = Date.now() - similarityStartTime;
+  const similarityCpu = process.cpuUsage();
+  const userDelta = (similarityCpu.user - similarityStartCpu.user) / 1000;
+  const systemDelta = (similarityCpu.system - similarityStartCpu.system) / 1000;
+  const totalDelta = userDelta + systemDelta;
+  console.log(`   💻 RAG Similarity: ${chunks.length} chunks in ${similarityTime}ms | CPU: ${totalDelta.toFixed(2)}ms (user: ${userDelta.toFixed(2)}ms, system: ${systemDelta.toFixed(2)}ms)`);
   
   // Sort by score (descending)
   scoredChunks.sort((a, b) => b.score - a.score);
