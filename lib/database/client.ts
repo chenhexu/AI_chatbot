@@ -19,9 +19,18 @@ export function getDatabasePool(): Pool {
       const hostname = url.hostname;
       const port = url.port || '5432';
       console.log(`🔌 Database connection: ${url.protocol}//${url.username}@${hostname}:${port}/${url.pathname.slice(1)}`);
+      console.log(`🔌 Full hostname: ${hostname}`);
+      
+      // Validate hostname is complete
+      if (!hostname.includes('.') && hostname.length < 20) {
+        console.error(`❌ WARNING: Hostname "${hostname}" looks truncated! Expected format: dpg-xxxxx-a.oregon-postgres.render.com`);
+        console.error(`❌ Connection string length: ${connectionString.length} characters`);
+        console.error(`❌ Connection string preview (first 100 chars): ${connectionString.substring(0, 100)}...`);
+      }
     } catch (e) {
       // If URL parsing fails, just log that we have a connection string
       console.log('🔌 Database connection string is set (format check skipped)');
+      console.error('❌ Failed to parse DATABASE_URL:', e);
     }
 
     pool = new Pool({
