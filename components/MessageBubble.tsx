@@ -14,7 +14,12 @@ interface MessageBubbleProps {
 /**
  * Convert text with URLs to JSX with clickable links
  */
-function renderTextWithLinks(text: string, isUser: boolean) {
+function renderTextWithLinks(text: string, isUser: boolean): (string | JSX.Element)[] {
+  // Handle null/undefined/empty text
+  if (!text || typeof text !== 'string') {
+    return [''];
+  }
+
   // Match URLs (including /api/pdf/... paths)
   const urlRegex = /(\/api\/pdf\/[^\s\)]+|https?:\/\/[^\s\)]+)/g;
   const parts: (string | JSX.Element)[] = [];
@@ -22,10 +27,16 @@ function renderTextWithLinks(text: string, isUser: boolean) {
   let match;
   let key = 0;
 
+  // Reset regex lastIndex to avoid issues with global regex
+  urlRegex.lastIndex = 0;
+
   while ((match = urlRegex.exec(text)) !== null) {
     // Add text before the URL
     if (match.index > lastIndex) {
-      parts.push(text.substring(lastIndex, match.index));
+      const textBefore = text.substring(lastIndex, match.index);
+      if (textBefore) {
+        parts.push(textBefore);
+      }
     }
 
     // Add the clickable link
@@ -56,10 +67,12 @@ function renderTextWithLinks(text: string, isUser: boolean) {
 
   // Add remaining text
   if (lastIndex < text.length) {
-    parts.push(text.substring(lastIndex));
+    const remainingText = text.substring(lastIndex);
+    if (remainingText) {
+      parts.push(remainingText);
+    }
   }
 
-  // Always return an array to avoid hydration mismatches
   // If no URLs found, return array with just the text
   if (parts.length === 0) {
     return [text];
@@ -69,6 +82,9 @@ function renderTextWithLinks(text: string, isUser: boolean) {
 }
 
 export default function MessageBubble({ message }: MessageBubbleProps) {
+  // Ensure message.text is valid
+  const messageText = message?.text || '';
+  
   return (
     <div className={`flex ${message.isUser ? 'justify-end' : 'justify-start'}`}>
       <div
@@ -79,17 +95,19 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
         }`}
       >
         <div className="whitespace-pre-wrap break-words">
-          {renderTextWithLinks(message.text, message.isUser)}
+          {renderTextWithLinks(messageText, message.isUser).map((part, index) => (
+            <span key={index}>{part}</span>
+          ))}
         </div>
         <p
           className={`text-xs mt-2 ${
             message.isUser ? 'text-blue-100' : 'text-gray-500'
           }`}
         >
-          {message.timestamp.toLocaleTimeString('fr-FR', {
+          {message.timestamp?.toLocaleTimeString('fr-FR', {
             hour: '2-digit',
             minute: '2-digit',
-          })}
+          }) || ''}
         </p>
       </div>
     </div>
