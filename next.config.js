@@ -4,6 +4,12 @@ const nextConfig = {
   // Exclude native Node.js modules from server-side bundling
   serverExternalPackages: ['canvas', 'pdfjs-dist', 'tesseract.js', 'pdf-parse'],
   webpack: (config, { isServer, webpack }) => {
+    // Configure path aliases to match tsconfig.json
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@': require('path').resolve(__dirname),
+    };
+    
     // Node.js-only libraries (pdfjs-dist, canvas, tesseract.js) only used in API routes
     if (!isServer) {
       // On client, make sure these Node.js modules aren't bundled

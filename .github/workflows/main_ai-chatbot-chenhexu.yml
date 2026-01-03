@@ -49,6 +49,18 @@ jobs:
         with:
           name: node-app
       
+      - name: Verify lib files exist in artifact
+        run: |
+          echo "Checking for lib files..."
+          ls -la lib/ || echo "lib directory not found"
+          ls -la lib/documentLoader.ts || echo "documentLoader.ts not found"
+          ls -la lib/rag.ts || echo "rag.ts not found"
+          ls -la lib/openai.ts || echo "openai.ts not found"
+          ls -la lib/database/documentStore.ts || echo "documentStore.ts not found"
+          ls -la lib/database/client.ts || echo "client.ts not found"
+          echo "Checking tsconfig.json..."
+          cat tsconfig.json || echo "tsconfig.json not found"
+      
       - name: Login to Azure
         uses: azure/login@v2
         with:
