@@ -13,6 +13,17 @@ export function getDatabasePool(): Pool {
       throw new Error('DATABASE_URL environment variable is not set');
     }
 
+    // Log connection details (without password) for debugging
+    try {
+      const url = new URL(connectionString);
+      const hostname = url.hostname;
+      const port = url.port || '5432';
+      console.log(`🔌 Database connection: ${url.protocol}//${url.username}@${hostname}:${port}/${url.pathname.slice(1)}`);
+    } catch (e) {
+      // If URL parsing fails, just log that we have a connection string
+      console.log('🔌 Database connection string is set (format check skipped)');
+    }
+
     pool = new Pool({
       connectionString,
       ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
