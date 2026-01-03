@@ -31,13 +31,25 @@ export async function POST(request: NextRequest) {
 
     console.log('🚀 Starting database migration from Render to Azure...');
 
-    const renderPool = new Pool({ connectionString: renderUrl });
-    const azurePool = new Pool({ connectionString: azureUrl });
+    // Render may not require SSL, but Azure PostgreSQL requires SSL
+    const renderPool = new Pool({ 
+      connectionString: renderUrl,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    });
+    const azurePool = new Pool({ 
+      connectionString: azureUrl,
+      ssl: { rejectUnauthorized: false }, // Azure PostgreSQL requires SSL
+    });
 
     try {
       // Test connections
+      console.log('🔌 Testing Render database connection...');
       await renderPool.query('SELECT 1');
+      console.log('✅ Connected to Render database');
+      
+      console.log('🔌 Testing Azure database connection...');
       await azurePool.query('SELECT 1');
+      console.log('✅ Connected to Azure database');
 
       // Initialize Azure schema
       const fs = await import('fs');
@@ -178,10 +190,28 @@ export async function POST(request: NextRequest) {
     }
   } catch (error: any) {
     console.error('❌ Migration failed:', error);
+    const errorMessage = error.message || 'Migration failed';
+    const errorDetails = error.code ? ` (Error code: ${error.code})` : '';
+    
+    // Provide more helpful error messages
+    if (errorMessage.includes('SSL') || errorMessage.includes('TLS')) {
+      return NextResponse.json(
+        { 
+          error: 'SSL/TLS connection required for Azure PostgreSQL. Please ensure your connection string includes SSL parameters.',
+          details: errorMessage + errorDetails
+        },
+        { status: 500 }
+      );
+    }
+    
     return NextResponse.json(
-      { error: error.message || 'Migration failed' },
+      { 
+        error: errorMessage + errorDetails,
+        details: error.stack || undefined
+      },
       { status: 500 }
     );
   }
 }
+
 

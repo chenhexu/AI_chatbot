@@ -54,8 +54,15 @@ async function migrate() {
 
   console.log('🚀 Starting migration from Render to Azure PostgreSQL...\n');
 
-  const renderPool = new Pool({ connectionString: renderUrl });
-  const azurePool = new Pool({ connectionString: azureUrl });
+  // Render may not require SSL, but Azure PostgreSQL requires SSL
+  const renderPool = new Pool({ 
+    connectionString: renderUrl,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  });
+  const azurePool = new Pool({ 
+    connectionString: azureUrl,
+    ssl: { rejectUnauthorized: false }, // Azure PostgreSQL requires SSL
+  });
 
   try {
     // Test connections
@@ -283,4 +290,5 @@ migrate().catch(error => {
   console.error('Fatal error:', error);
   process.exit(1);
 });
+
 
