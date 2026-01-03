@@ -9,24 +9,78 @@ import { classifyChunkSubject } from '@/lib/subjectClassifier';
  */
 function extractRetryDelay(error: any): number | null {
   try {
-    const errorStr = JSON.stringify(error);
-    // Look for retry delay in error details (e.g., "Please retry in 14.5677494s")
+    // First, try to find retryDelay in the error message string
+    const errorStr = error?.message || error?.toString() || JSON.stringify(error);
+    
+    // Look for "Please retry in X.XXs" pattern
     const retryMatch = errorStr.match(/Please retry in ([\d.]+)s/i);
     if (retryMatch) {
       const seconds = parseFloat(retryMatch[1]);
+      console.log(`   🔍 Extracted retry delay from message: ${seconds}s`);
       return Math.ceil(seconds * 1000) + 1000; // Convert to ms and add 1 second buffer
     }
     
-    // Also check errorDetails for RetryInfo
-    if (error?.errorDetails) {
-      const retryInfo = error.errorDetails.find((d: any) => d['@type']?.includes('RetryInfo'));
+    // Look for "retryDelay":"Xs" pattern in JSON
+    const jsonMatch = errorStr.match(/"retryDelay"\s*:\s*"([\d.]+)s"/i);
+    if (jsonMatch) {
+      const seconds = parseFloat(jsonMatch[1]);
+      console.log(`   🔍 Extracted retry delay from JSON: ${seconds}s`);
+      return Math.ceil(seconds * 1000) + 1000;
+    }
+    
+    // Check errorDetails array for RetryInfo
+    if (error?.errorDetails && Array.isArray(error.errorDetails)) {
+      const retryInfo = error.errorDetails.find((d: any) => 
+        d['@type']?.includes('RetryInfo') || d['@type']?.includes('retry')
+      );
       if (retryInfo?.retryDelay) {
-        const seconds = parseFloat(retryInfo.retryDelay);
-        return Math.ceil(seconds * 1000) + 1000;
+        // retryDelay might be "31s" or a number
+        const delayStr = String(retryInfo.retryDelay);
+        const secondsMatch = delayStr.match(/([\d.]+)s?/);
+        if (secondsMatch) {
+          const seconds = parseFloat(secondsMatch[1]);
+          console.log(`   🔍 Extracted retry delay from errorDetails: ${seconds}s`);
+          return Math.ceil(seconds * 1000) + 1000;
+        }
       }
     }
+    
+    // Check nested error structure (error.error might contain errorDetails)
+    if (error?.error?.errorDetails && Array.isArray(error.error.errorDetails)) {
+      const retryInfo = error.error.errorDetails.find((d: any) => 
+        d['@type']?.includes('RetryInfo') || d['@type']?.includes('retry')
+      );
+      if (retryInfo?.retryDelay) {
+        const delayStr = String(retryInfo.retryDelay);
+        const secondsMatch = delayStr.match(/([\d.]+)s?/);
+        if (secondsMatch) {
+          const seconds = parseFloat(secondsMatch[1]);
+          console.log(`   🔍 Extracted retry delay from nested error: ${seconds}s`);
+          return Math.ceil(seconds * 1000) + 1000;
+        }
+      }
+    }
+    
+    // Last resort: search the entire error object as JSON string
+    try {
+      const fullErrorStr = JSON.stringify(error);
+      const fullJsonMatch = fullErrorStr.match(/"retryDelay"\s*:\s*"([\d.]+)s"/i);
+      if (fullJsonMatch) {
+        const seconds = parseFloat(fullJsonMatch[1]);
+        console.log(`   🔍 Extracted retry delay from full JSON: ${seconds}s`);
+        return Math.ceil(seconds * 1000) + 1000;
+      }
+    } catch (e) {
+      // Ignore JSON stringify errors
+    }
+    
+    console.log(`   ⚠️ Could not extract retry delay from error. Error structure:`, {
+      hasErrorDetails: !!error?.errorDetails,
+      hasError: !!error?.error,
+      message: error?.message?.substring(0, 200),
+    });
   } catch (e) {
-    // Ignore parsing errors
+    console.error(`   ❌ Error extracting retry delay:`, e);
   }
   return null;
 }
@@ -127,19 +181,30 @@ export async function POST() {
         console.log(`   ✅ Classified chunk ${chunk.id} as "${subject}" (${classified}/${unclassified.rows.length})`);
       } catch (error: any) {
         const errorMsg = error instanceof Error ? error.message : String(error);
-        const errorFull = JSON.stringify(error);
         
         // Check if it's a rate limit error
-        const isRateLimit = errorMsg.includes('429') || errorMsg.includes('quota') || errorMsg.includes('rate limit');
+        const isRateLimit = errorMsg.includes('429') || 
+                           errorMsg.includes('quota') || 
+                           errorMsg.includes('rate limit') ||
+                           errorMsg.includes('Too Many Requests');
         
         if (isRateLimit) {
+          // Log the full error structure for debugging
+          console.log(`   🔍 Rate limit error detected for chunk ${chunk.id}. Error structure:`, {
+            message: errorMsg?.substring(0, 300),
+            hasErrorDetails: !!error?.errorDetails,
+            hasError: !!error?.error,
+            status: error?.status,
+            statusText: error?.statusText,
+          });
+          
           // Extract retry delay from error
           const retryDelay = extractRetryDelay(error);
           
           if (retryDelay !== null) {
-            console.log(`   ⏳ Rate limit hit for chunk ${chunk.id}. Retrying after ${retryDelay / 1000}s...`);
+            console.log(`   ⏳ Rate limit hit for chunk ${chunk.id}. Retrying after ${retryDelay / 1000}s (extracted from API error)...`);
             try {
-              // Wait for retry delay + 1 second buffer
+              // Wait for retry delay (already includes 1 second buffer)
               await new Promise(resolve => setTimeout(resolve, retryDelay));
               
               // Retry classification
@@ -160,10 +225,28 @@ export async function POST() {
               await storeFailedClassification(chunk.id, `Rate limit retry failed: ${retryErrorMsg}`);
             }
           } else {
-            // Can't extract delay, count as error and store as failed
-            errors++;
-            console.error(`   ⚠️ Rate limit hit for chunk ${chunk.id} but couldn't extract retry delay, storing as failed`);
-            await storeFailedClassification(chunk.id, errorMsg);
+            // Can't extract delay, use default delay and retry once
+            const defaultDelay = 5000; // 5 seconds default
+            console.log(`   ⚠️ Rate limit hit for chunk ${chunk.id} but couldn't extract retry delay. Using default ${defaultDelay / 1000}s delay...`);
+            try {
+              await new Promise(resolve => setTimeout(resolve, defaultDelay));
+              
+              // Retry classification
+              const subject = await classifyChunkSubject(chunk.text);
+              await query('UPDATE chunks SET subject = $1 WHERE id = $2', [subject, chunk.id]);
+              
+              // Remove from failed_classifications if it was there
+              await query('DELETE FROM failed_classifications WHERE chunk_id = $1', [chunk.id]);
+              
+              classified++;
+              console.log(`   ✅ Classified chunk ${chunk.id} as "${subject}" after default delay retry (${classified}/${unclassified.rows.length})`);
+            } catch (retryError: any) {
+              // Retry failed, count as error and store as failed
+              errors++;
+              const retryErrorMsg = retryError instanceof Error ? retryError.message : String(retryError);
+              console.error(`   ❌ Default delay retry also failed for chunk ${chunk.id}, storing as failed:`, retryErrorMsg);
+              await storeFailedClassification(chunk.id, `Rate limit (no delay extracted): ${errorMsg}`);
+            }
           }
         } else {
           // Non-rate-limit error, count as error and store as failed
