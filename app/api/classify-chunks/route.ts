@@ -85,8 +85,9 @@ export async function GET() {
 
 /**
  * POST /api/classify-chunks - Start/resume classification
+ * Query params: ?reclassifyOther=true to reclassify only chunks with subject='other'
  */
-export async function POST() {
+export async function POST(request: Request) {
   try {
     if (!process.env.DATABASE_URL) {
       return NextResponse.json(
@@ -101,6 +102,10 @@ export async function POST() {
         { status: 409 }
       );
     }
+
+    // Check if we should reclassify only "other" chunks
+    const url = new URL(request.url);
+    const reclassifyOther = url.searchParams.get('reclassifyOther') === 'true';
 
     // Ensure schema is up to date
     try {
@@ -130,22 +135,28 @@ export async function POST() {
         let errors = 0;
         let lastProcessedId = classificationState.lastProcessedId || 0;
 
-        console.log('🧠 Starting chunk classification...');
-        console.log(`📊 Starting from chunk ID: ${lastProcessedId + 1}`);
+        console.log('\u001b[36mStarting chunk classification...\u001b[0m');
+        console.log(`\u001b[36mStarting from chunk ID: ${lastProcessedId + 1}\u001b[0m`);
 
         while (!signal.aborted) {
-          // Get next unclassified chunks in order, starting after lastProcessedId
+          // Get next chunks to classify - either unclassified or "other" chunks (if reclassifyOther)
           const unclassified = await query<{ id: number; text: string }>(
-            `SELECT id, text 
-             FROM chunks 
-             WHERE subject IS NULL AND id > $1 
-             ORDER BY id ASC 
-             LIMIT ${PARALLEL_SIZE}`,
+            reclassifyOther
+              ? `SELECT id, text 
+                 FROM chunks 
+                 WHERE subject = 'other' AND id > $1 
+                 ORDER BY id ASC 
+                 LIMIT ${PARALLEL_SIZE}`
+              : `SELECT id, text 
+                 FROM chunks 
+                 WHERE subject IS NULL AND id > $1 
+                 ORDER BY id ASC 
+                 LIMIT ${PARALLEL_SIZE}`,
             [lastProcessedId]
           );
 
           if (unclassified.rows.length === 0) {
-            console.log('✅ All chunks classified!');
+            console.log('\u001b[32mAll chunks classified!\u001b[0m');
             break;
           }
 
@@ -165,17 +176,17 @@ export async function POST() {
               classificationState.lastProcessedId = lastProcessedId;
               
               classified++;
-              console.log(`✅ Classified chunk ${chunk.id} as "${subject}"`);
+              console.log(`\u001b[32mClassified chunk ${chunk.id} as "${subject}"\u001b[0m`);
               
               return { success: true, chunkId: chunk.id };
             } catch (error: any) {
               if (signal.aborted) {
-                console.log(`⚠️ Classification cancelled for chunk ${chunk.id}`);
+                console.log(`\u001b[33mClassification cancelled for chunk ${chunk.id}\u001b[0m`);
                 throw error;
               }
 
               const errorMsg = error instanceof Error ? error.message : String(error);
-              console.error(`❌ Failed to classify chunk ${chunk.id}:`, errorMsg);
+              console.error(`\u001b[31mFailed to classify chunk ${chunk.id}: ${errorMsg}\u001b[0m`);
               
               errors++;
               await storeFailedClassification(chunk.id, errorMsg);
@@ -201,10 +212,11 @@ export async function POST() {
         const remaining = await query<{ count: string }>('SELECT COUNT(*) as count FROM chunks WHERE subject IS NULL');
         const remainingCount = parseInt(remaining.rows[0].count, 10);
 
-        console.log(`✅ Classification complete! Classified: ${classified}, Errors: ${errors}, Remaining: ${remainingCount}`);
+        console.log(`\u001b[32mClassification complete! Classified: ${classified}, Errors: ${errors}, Remaining: ${remainingCount}\u001b[0m`);
       } catch (error) {
         if (!signal.aborted) {
-          console.error('❌ Classification error:', error);
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          console.error(`\u001b[31mClassification error: ${errorMsg}\u001b[0m`);
         }
       } finally {
         classificationState.isRunning = false;
@@ -214,7 +226,8 @@ export async function POST() {
 
     // Start async process
     startClassification().catch(err => {
-      console.error('Classification process error:', err);
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.error(`\u001b[31mClassification process error: ${errorMsg}\u001b[0m`);
       classificationState.isRunning = false;
       classificationState.abortController = null;
     });
@@ -227,7 +240,8 @@ export async function POST() {
   } catch (error) {
     classificationState.isRunning = false;
     classificationState.abortController = null;
-    console.error('❌ Failed to start classification:', error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error(`\u001b[31mFailed to start classification: ${errorMsg}\u001b[0m`);
     return NextResponse.json(
       {
         error: 'Failed to start classification',
@@ -251,7 +265,7 @@ export async function DELETE(request: Request) {
     // Stop running classification
     if (classificationState.isRunning && classificationState.abortController) {
       classificationState.abortController.abort();
-      console.log('⏹️ Classification stopped by user');
+      console.log('\u001b[33mClassification stopped by user\u001b[0m');
       
       // Wait a bit for cancellation to propagate
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -280,7 +294,7 @@ export async function DELETE(request: Request) {
       );
     }
 
-    console.log('🗑️ Starting to clear all chunk classifications...');
+    console.log('\u001b[36mStarting to clear all chunk classifications...\u001b[0m');
 
     const countResult = await query<{ count: string }>(
       'SELECT COUNT(*) as count FROM chunks WHERE subject IS NOT NULL'
@@ -302,7 +316,7 @@ export async function DELETE(request: Request) {
     classificationState.lastProcessedId = 0;
 
     const totalDuration = Date.now() - startTime;
-    console.log(`✅ Cleared ${clearedCount} classifications in ${totalDuration}ms`);
+    console.log(`\u001b[32mCleared ${clearedCount} classifications in ${totalDuration}ms\u001b[0m`);
 
     return NextResponse.json({
       status: 'success',
@@ -311,7 +325,8 @@ export async function DELETE(request: Request) {
     });
   } catch (error) {
     const totalDuration = Date.now() - startTime;
-    console.error(`❌ Failed to clear classifications after ${totalDuration}ms:`, error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error(`\u001b[31mFailed to clear classifications after ${totalDuration}ms: ${errorMsg}\u001b[0m`);
     return NextResponse.json(
       {
         error: 'Failed to clear classifications',

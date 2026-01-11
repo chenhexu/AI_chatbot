@@ -13,6 +13,7 @@ export const SUBJECTS = [
   'events',            // School events, activities
   'admissions',        // Enrollment, registration
   'sports',            // Sports, athletics
+  'low_confidence',    // Low confidence classifications (to be reviewed)
   'other'              // Everything else
 ] as const;
 
@@ -82,6 +83,7 @@ CATEGORIES (choose one only):
 - events: School events, activities, special occasions
 - admissions: Enrollment, registration, applications
 - sports: Sports, athletics, teams
+- low_confidence: Low confidence classifications (use when confidence < 0.5)
 - other: Everything else
 OUTPUT FORMAT (STRICT):
 Return ONLY valid JSON with exactly these fields:
@@ -156,9 +158,10 @@ ${preview}
     
     // Validate category
     if (category && SUBJECTS.includes(category as Subject)) {
-      // Log low-confidence classifications for review
+      // If confidence is low, use low_confidence category instead
       if (confidence < 0.5) {
-        console.warn(`Low confidence classification (${confidence}): "${category}" for text: ${preview.substring(0, 100)}...`);
+        console.warn(`Low confidence classification (${confidence}): "${category}" -> "low_confidence" for text: ${preview.substring(0, 100)}...`);
+        return 'low_confidence';
       }
       return category as Subject;
     }
@@ -199,6 +202,7 @@ Which of these document categories might contain the answer? Choose 1-3 most rel
 - events: School events
 - admissions: Enrollment, registration
 - sports: Sports, athletics
+- low_confidence: Low confidence classifications (to be reviewed)
 - other: Everything else
 
 Respond with ONLY the category names separated by commas, nothing else. Example: "calendar,general"`;

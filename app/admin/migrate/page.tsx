@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 
 interface BigChunk {
@@ -63,6 +63,30 @@ export default function MigratePage() {
     skipped: { documents: number; chunks: number };
     azure: { documents: number; chunks: number };
   } | null>(null);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Poll classification status when classifying
+  useEffect(() => {
+    if (classifyStatus === 'classifying') {
+      // Poll every 2 seconds
+      const interval = setInterval(() => {
+        checkClassificationStatus();
+      }, 2000);
+      pollingIntervalRef.current = interval;
+
+      return () => {
+        clearInterval(interval);
+        pollingIntervalRef.current = null;
+      };
+    } else {
+      // Clear polling when not classifying
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [classifyStatus]);
 
   const checkStatus = async () => {
     try {
@@ -174,7 +198,6 @@ export default function MigratePage() {
   };
 
   const checkClassificationStatus = async () => {
-    setClassifyStatus('checking');
     try {
       const response = await fetch('/api/classify-chunks');
       const data = await response.json();
@@ -187,7 +210,9 @@ export default function MigratePage() {
           percentage: data.percentage,
         });
         setClassifyMessage(`${data.classified}/${data.total} chunks classified (${data.percentage}%)`);
-        setClassifyStatus('idle');
+        
+        // Update status based on API response
+        setClassifyStatus(data.isRunning ? 'classifying' : 'idle');
       } else {
         setClassifyStatus('error');
         setClassifyMessage(data.error || 'Failed to check status');
@@ -198,21 +223,21 @@ export default function MigratePage() {
     }
   };
 
-  const runClassification = async () => {
+  const runClassification = async (reclassifyOther: boolean = false) => {
     setClassifyStatus('classifying');
-    setClassifyMessage('Classifying chunks... (this may take a while)');
+    setClassifyMessage(reclassifyOther ? 'Reclassifying OTHER chunks...' : 'Classifying chunks... (this may take a while)');
 
     try {
-      const response = await fetch('/api/classify-chunks', {
+      const url = reclassifyOther ? '/api/classify-chunks?reclassifyOther=true' : '/api/classify-chunks';
+      const response = await fetch(url, {
         method: 'POST',
       });
 
       const data = await response.json();
 
-      if (response.ok && data.status === 'success') {
-        setClassifyStatus('success');
-        setClassifyMessage(data.message);
-        // Refresh status
+      if (response.ok && (data.status === 'started' || data.status === 'success')) {
+        // Status will be updated by polling
+        // Refresh status immediately
         await checkClassificationStatus();
       } else {
         setClassifyStatus('error');
@@ -220,6 +245,27 @@ export default function MigratePage() {
       }
     } catch (error) {
       setClassifyStatus('error');
+      setClassifyMessage(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  const stopClassification = async () => {
+    try {
+      const response = await fetch('/api/classify-chunks?action=stop', {
+        method: 'DELETE',
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.status === 'stopped') {
+        setClassifyStatus('idle');
+        setClassifyMessage('Classification stopped');
+        // Refresh status
+        await checkClassificationStatus();
+      } else {
+        setClassifyMessage(data.error || 'Failed to stop classification');
+      }
+    } catch (error) {
       setClassifyMessage(`Error: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
@@ -394,7 +440,7 @@ export default function MigratePage() {
               href="/admin/upload"
               className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm"
             >
-              ðŸ“¤ Go to Upload
+              Go to Upload
             </Link>
           </div>
           <p className="text-gray-600 mb-6">
@@ -420,13 +466,13 @@ export default function MigratePage() {
                 onClick={checkBiggestChunks}
                 className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition"
               >
-                ðŸ“Š Check Biggest Chunks
+                Check Biggest Chunks
               </button>
               <button
                 onClick={checkClassificationStatus}
                 className="px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition"
               >
-                ðŸ§  Check Classification
+                Check Classification
               </button>
             </div>
 
@@ -443,7 +489,7 @@ export default function MigratePage() {
             {/* Biggest Chunks Display */}
             {showBigChunks && dbStats && (
               <div className="bg-teal-50 border border-teal-200 rounded-lg p-4">
-                <h3 className="text-sm font-semibold text-teal-800 mb-2">ðŸ“Š Chunk Statistics</h3>
+                <h3 className="text-sm font-semibold text-teal-800 mb-2">Chunk Statistics</h3>
                 <p className="text-sm text-teal-700 mb-2">
                   Average chunk size: <strong>{dbStats.averageChunkSize.toLocaleString()} bytes</strong>
                 </p>
@@ -507,14 +553,14 @@ export default function MigratePage() {
             {(skippedFiles.length > 0 || skippedChunksCount > 0 || splitChunksCount > 0) && (
               <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
                 <p className="text-sm font-semibold text-orange-800 mb-2">
-                  ðŸ“Š Migration Details:
+                  Migration Details:
                 </p>
                 
                 {/* Summary stats */}
                 <div className="flex flex-wrap gap-2 mb-2 text-xs">
                   {splitChunksCount > 0 && (
                     <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded">
-                      ðŸ”ª Split {splitChunksCount} large chunks
+                      Split {splitChunksCount} large chunks
                     </span>
                   )}
                   {skippedChunksCount > 0 && (
@@ -598,21 +644,37 @@ export default function MigratePage() {
                         disabled={classifyStatus === 'clearing' || classifyStatus === 'classifying' || classifyStatus === 'checking'}
                         className="px-4 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                       >
-                        {classifyStatus === 'clearing' ? 'Clearing...' : 'ðŸ—‘ï¸ Clear'}
+                        {classifyStatus === 'clearing' ? 'Clearing...' : 'Clear'}
+                      </button>
+                    )}
+                    {classifyStatus === 'classifying' ? (
+                      <button
+                        onClick={stopClassification}
+                        className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm"
+                      >
+                        Stop
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => runClassification(false)}
+                        disabled={classifyStatus === 'clearing' || classifyStatus === 'checking'}
+                        className="px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                      >
+                        Start
                       </button>
                     )}
                     <button
-                      onClick={runClassification}
+                      onClick={() => runClassification(true)}
                       disabled={classifyStatus === 'classifying' || classifyStatus === 'clearing' || classifyStatus === 'checking'}
-                      className="px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                      className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                     >
-                      {classifyStatus === 'classifying' ? 'Classifying...' : 'ðŸ§  Classify Chunks'}
+                      Reclassify OTHER
                     </button>
                     <button
                       onClick={viewFailedChunks}
                       className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition text-sm"
                     >
-                      âš ï¸ View Failed
+                      View Failed
                     </button>
                   </div>
                 </div>
@@ -646,13 +708,13 @@ export default function MigratePage() {
                       disabled={retryStatus === 'retrying' || failedChunks.length === 0}
                       className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                     >
-                      {retryStatus === 'retrying' ? 'Retrying...' : 'ðŸ”„ Retry Failed'}
+                      {retryStatus === 'retrying' ? 'Retrying...' : 'Retry Failed'}
                     </button>
                     <button
                       onClick={() => setShowFailedChunks(false)}
                       className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition text-sm"
                     >
-                      âœ• Close
+                      Close
                     </button>
                   </div>
                 </div>
@@ -714,7 +776,7 @@ export default function MigratePage() {
                   disabled={clearStatus === 'clearing'}
                   className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                 >
-                  {clearStatus === 'clearing' ? 'Clearing...' : 'ðŸ—‘ï¸ Clear Database'}
+                  {clearStatus === 'clearing' ? 'Clearing...' : 'Clear Database'}
                 </button>
               </div>
               {clearMessage && (
@@ -730,7 +792,7 @@ export default function MigratePage() {
 
             {/* Database Migration (Render â†’ Azure) */}
             <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-4">
-              <h3 className="text-sm font-semibold text-cyan-800 mb-2">ðŸ”„ Database Migration (Render â†’ Azure)</h3>
+              <h3 className="text-sm font-semibold text-cyan-800 mb-2">Database Migration (Render → Azure)</h3>
               <p className="text-xs text-cyan-700 mb-3">
                 Migrate all data from Render PostgreSQL to Azure PostgreSQL. Requires RENDER_DATABASE_URL and AZURE_DATABASE_URL environment variables.
               </p>
@@ -739,7 +801,7 @@ export default function MigratePage() {
                 disabled={dbMigrateStatus === 'migrating'}
                 className="px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
               >
-                {dbMigrateStatus === 'migrating' ? 'Migrating...' : 'Migrate Database (Render â†’ Azure)'}
+                {dbMigrateStatus === 'migrating' ? 'Migrating...' : 'Migrate Database (Render → Azure)'}
               </button>
               {dbMigrateMessage && (
                 <p className={`text-xs mt-2 ${
