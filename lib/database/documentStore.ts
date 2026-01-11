@@ -91,11 +91,20 @@ export async function loadAllChunks(subjects?: string[]): Promise<TextChunk[]> {
     
     const params: any[] = [];
     if (subjects && subjects.length > 0) {
-      // Filter by subjects
-      const placeholders = subjects.map((_, i) => `$${i + 1}`).join(', ');
-      sql += ` WHERE subject IN (${placeholders})`;
-      params.push(...subjects);
-      console.log(`🔍 Filtering by subjects: ${subjects.join(', ')}`);
+      // Filter by subjects, excluding low_confidence chunks
+      const filteredSubjects = subjects.filter(s => s !== 'low_confidence');
+      if (filteredSubjects.length > 0) {
+        const placeholders = filteredSubjects.map((_, i) => `$${i + 1}`).join(', ');
+        sql += ` WHERE subject IN (${placeholders}) AND (subject != 'low_confidence' OR subject IS NULL)`;
+        params.push(...filteredSubjects);
+        console.log(`🔍 Filtering by subjects: ${filteredSubjects.join(', ')} (excluding low_confidence)`);
+      } else {
+        // If all subjects were filtered out, exclude low_confidence only
+        sql += ` WHERE (subject != 'low_confidence' OR subject IS NULL)`;
+      }
+    } else {
+      // Even when loading all chunks, exclude low_confidence
+      sql += ` WHERE (subject != 'low_confidence' OR subject IS NULL)`;
     }
     
     sql += ` ORDER BY document_id, chunk_index`;

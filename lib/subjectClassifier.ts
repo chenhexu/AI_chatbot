@@ -217,6 +217,9 @@ Respond with ONLY the category names separated by commas, nothing else. Example:
       .filter(c => SUBJECTS.includes(c as Subject))
       .map(c => c as Subject);
     
+    // Filter out 'low_confidence' - don't search in low confidence chunks
+    categories = categories.filter(c => c !== 'low_confidence');
+    
     // Always include 'general' as fallback, and 'other' if nothing matches
     if (categories.length === 0) {
       return ['general', 'other'];
