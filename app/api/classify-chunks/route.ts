@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+﻿import { NextResponse } from 'next/server';
 import { query, ensureSubjectColumn, ensureFailedClassificationsTable } from '@/lib/database/client';
 import { initializeDatabase } from '@/lib/database/client';
 import { classifyChunkSubject } from '@/lib/subjectClassifier';
@@ -11,7 +11,7 @@ function extractRetryDelay(error: any): number | null {
   try {
     // Log full error structure for debugging (first time only)
     if (!extractRetryDelay._logged) {
-      console.log(`   🔍 Full error structure:`, {
+      console.log(`   ðŸ” Full error structure:`, {
         type: typeof error,
         constructor: error?.constructor?.name,
         keys: error ? Object.keys(error) : [],
@@ -25,9 +25,9 @@ function extractRetryDelay(error: any): number | null {
       });
       try {
         const errorJson = JSON.stringify(error, null, 2);
-        console.log(`   🔍 Error as JSON (first 2000 chars):`, errorJson.substring(0, 2000));
+        console.log(`   ðŸ” Error as JSON (first 2000 chars):`, errorJson.substring(0, 2000));
       } catch (e) {
-        console.log(`   🔍 Could not stringify error:`, e);
+        console.log(`   ðŸ” Could not stringify error:`, e);
       }
       extractRetryDelay._logged = true;
     }
@@ -39,7 +39,7 @@ function extractRetryDelay(error: any): number | null {
     const retryMatch = errorStr.match(/Please retry in ([\d.]+)s/i);
     if (retryMatch) {
       const seconds = parseFloat(retryMatch[1]);
-      console.log(`   ✅ Extracted retry delay from message: ${seconds}s`);
+      console.log(`   âœ… Extracted retry delay from message: ${seconds}s`);
       return Math.ceil(seconds * 1000) + 1000; // Convert to ms and add 1 second buffer
     }
     
@@ -52,7 +52,7 @@ function extractRetryDelay(error: any): number | null {
             const secondsMatch = delayStr.match(/([\d.]+)s?/);
             if (secondsMatch) {
               const seconds = parseFloat(secondsMatch[1]);
-              console.log(`   ✅ Extracted retry delay from errorDetails: ${seconds}s`);
+              console.log(`   âœ… Extracted retry delay from errorDetails: ${seconds}s`);
               return Math.ceil(seconds * 1000) + 1000;
             }
           }
@@ -70,7 +70,7 @@ function extractRetryDelay(error: any): number | null {
               const secondsMatch = delayStr.match(/([\d.]+)s?/);
               if (secondsMatch) {
                 const seconds = parseFloat(secondsMatch[1]);
-                console.log(`   ✅ Extracted retry delay from nested error.errorDetails: ${seconds}s`);
+                console.log(`   âœ… Extracted retry delay from nested error.errorDetails: ${seconds}s`);
                 return Math.ceil(seconds * 1000) + 1000;
               }
             }
@@ -87,7 +87,7 @@ function extractRetryDelay(error: any): number | null {
       const jsonMatch = fullErrorStr.match(/"retryDelay"\s*:\s*"([\d.]+)s"/i);
       if (jsonMatch) {
         const seconds = parseFloat(jsonMatch[1]);
-        console.log(`   ✅ Extracted retry delay from full JSON: ${seconds}s`);
+        console.log(`   âœ… Extracted retry delay from full JSON: ${seconds}s`);
         return Math.ceil(seconds * 1000) + 1000;
       }
       
@@ -95,14 +95,14 @@ function extractRetryDelay(error: any): number | null {
       const jsonMatch2 = fullErrorStr.match(/retryDelay["\s]*:["\s]*([\d.]+)s/i);
       if (jsonMatch2) {
         const seconds = parseFloat(jsonMatch2[1]);
-        console.log(`   ✅ Extracted retry delay from JSON (variant 2): ${seconds}s`);
+        console.log(`   âœ… Extracted retry delay from JSON (variant 2): ${seconds}s`);
         return Math.ceil(seconds * 1000) + 1000;
       }
     } catch (e) {
       // Ignore JSON stringify errors
     }
     
-    console.log(`   ⚠️ Could not extract retry delay from error. Error structure summary:`, {
+    console.log(`   âš ï¸ Could not extract retry delay from error. Error structure summary:`, {
       hasErrorDetails: !!error?.errorDetails,
       errorDetailsLength: error?.errorDetails?.length,
       hasError: !!error?.error,
@@ -111,7 +111,7 @@ function extractRetryDelay(error: any): number | null {
       status: error?.status,
     });
   } catch (e) {
-    console.error(`   ❌ Error extracting retry delay:`, e);
+    console.error(`   âŒ Error extracting retry delay:`, e);
   }
   return null;
 }
@@ -171,7 +171,7 @@ export async function POST() {
       }
     }
 
-    console.log('🧠 Starting chunk classification...');
+    console.log('ðŸ§  Starting chunk classification...');
 
     // Batch size and delay for gemini-2.5-flash-lite: 15 requests/minute, 1000/day
     const BATCH_SIZE = 15; // Process 15 chunks per batch (matches per-minute limit)
@@ -190,7 +190,7 @@ export async function POST() {
       });
     }
 
-    console.log(`📊 Found ${unclassified.rows.length} unclassified chunks (processing ${BATCH_SIZE} per batch to respect rate limits)`);
+    console.log(`ðŸ“Š Found ${unclassified.rows.length} unclassified chunks (processing ${BATCH_SIZE} per batch to respect rate limits)`);
 
     let classified = 0;
     let errors = 0;
@@ -200,7 +200,7 @@ export async function POST() {
       
       // Add delay between requests (except for the first one)
       if (i > 0) {
-        console.log(`   ⏳ Waiting ${DELAY_BETWEEN_REQUESTS_MS / 1000}s to respect rate limits...`);
+        console.log(`   â³ Waiting ${DELAY_BETWEEN_REQUESTS_MS / 1000}s to respect rate limits...`);
         await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_REQUESTS_MS));
       }
 
@@ -212,7 +212,7 @@ export async function POST() {
         await query('DELETE FROM failed_classifications WHERE chunk_id = $1', [chunk.id]);
         
         classified++;
-        console.log(`   ✅ Classified chunk ${chunk.id} as "${subject}" (${classified}/${unclassified.rows.length})`);
+        console.log(`   âœ… Classified chunk ${chunk.id} as "${subject}" (${classified}/${unclassified.rows.length})`);
       } catch (error: any) {
         const errorMsg = error instanceof Error ? error.message : String(error);
         
@@ -230,7 +230,7 @@ export async function POST() {
           const retryDelay = extractRetryDelay(error);
           
           if (retryDelay !== null) {
-            console.log(`   ⏳ Rate limit hit for chunk ${chunk.id}. Retrying after ${retryDelay / 1000}s (extracted from API error)...`);
+            console.log(`   â³ Rate limit hit for chunk ${chunk.id}. Retrying after ${retryDelay / 1000}s (extracted from API error)...`);
             try {
               // Wait for retry delay (already includes 1 second buffer)
               await new Promise(resolve => setTimeout(resolve, retryDelay));
@@ -243,19 +243,19 @@ export async function POST() {
               await query('DELETE FROM failed_classifications WHERE chunk_id = $1', [chunk.id]);
               
               classified++;
-              console.log(`   ✅ Classified chunk ${chunk.id} as "${subject}" after retry (${classified}/${unclassified.rows.length})`);
+              console.log(`   âœ… Classified chunk ${chunk.id} as "${subject}" after retry (${classified}/${unclassified.rows.length})`);
               // Don't increment errors - retry succeeded!
             } catch (retryError: any) {
               // Retry also failed, count as error and store in failed_classifications
               errors++;
               const retryErrorMsg = retryError instanceof Error ? retryError.message : String(retryError);
-              console.error(`   ❌ Retry failed for chunk ${chunk.id}, storing in failed classifications:`, retryErrorMsg);
+              console.error(`   âŒ Retry failed for chunk ${chunk.id}, storing in failed classifications:`, retryErrorMsg);
               await storeFailedClassification(chunk.id, `Rate limit retry failed: ${retryErrorMsg}`);
             }
           } else {
             // Can't extract delay, use default delay and retry once
             const defaultDelay = 5000; // 5 seconds default
-            console.log(`   ⚠️ Rate limit hit for chunk ${chunk.id} but couldn't extract retry delay. Using default ${defaultDelay / 1000}s delay...`);
+            console.log(`   âš ï¸ Rate limit hit for chunk ${chunk.id} but couldn't extract retry delay. Using default ${defaultDelay / 1000}s delay...`);
             try {
               await new Promise(resolve => setTimeout(resolve, defaultDelay));
               
@@ -267,25 +267,25 @@ export async function POST() {
               await query('DELETE FROM failed_classifications WHERE chunk_id = $1', [chunk.id]);
               
               classified++;
-              console.log(`   ✅ Classified chunk ${chunk.id} as "${subject}" after default delay retry (${classified}/${unclassified.rows.length})`);
+              console.log(`   âœ… Classified chunk ${chunk.id} as "${subject}" after default delay retry (${classified}/${unclassified.rows.length})`);
             } catch (retryError: any) {
               // Retry failed, count as error and store as failed
               errors++;
               const retryErrorMsg = retryError instanceof Error ? retryError.message : String(retryError);
-              console.error(`   ❌ Default delay retry also failed for chunk ${chunk.id}, storing as failed:`, retryErrorMsg);
+              console.error(`   âŒ Default delay retry also failed for chunk ${chunk.id}, storing as failed:`, retryErrorMsg);
               await storeFailedClassification(chunk.id, `Rate limit (no delay extracted): ${errorMsg}`);
             }
           }
         } else {
           // Non-rate-limit error, count as error and store as failed
           errors++;
-          console.error(`   ❌ Failed to classify chunk ${chunk.id}:`, errorMsg);
+          console.error(`   âŒ Failed to classify chunk ${chunk.id}:`, errorMsg);
           await storeFailedClassification(chunk.id, errorMsg);
         }
       }
     }
 
-    console.log(`✅ Classification batch complete! Classified ${classified} chunks, ${errors} errors`);
+    console.log(`âœ… Classification batch complete! Classified ${classified} chunks, ${errors} errors`);
 
     // Calculate remaining
     const remainingResult = await query<{ count: string }>('SELECT COUNT(*) as count FROM chunks WHERE subject IS NULL');
@@ -301,7 +301,7 @@ export async function POST() {
         : `Classified ${classified} chunks. All chunks are now classified!`,
     });
   } catch (error) {
-    console.error('❌ Classification failed:', error);
+    console.error('âŒ Classification failed:', error);
     return NextResponse.json(
       {
         error: 'Classification failed',
@@ -326,21 +326,21 @@ export async function DELETE() {
       );
     }
 
-    console.log('🗑️ Starting to clear all chunk classifications...');
+    console.log('ðŸ—‘ï¸ Starting to clear all chunk classifications...');
     const logStart = Date.now();
 
     // First, count how many chunks are classified (for logging)
-    console.log('   📊 Counting classified chunks...');
+    console.log('   ðŸ“Š Counting classified chunks...');
     const countStart = Date.now();
     const countResult = await query<{ count: string }>(
       'SELECT COUNT(*) as count FROM chunks WHERE subject IS NOT NULL'
     );
     const classifiedCount = parseInt(countResult.rows[0].count, 10);
     const countDuration = Date.now() - countStart;
-    console.log(`   ✅ Found ${classifiedCount} classified chunks (took ${countDuration}ms)`);
+    console.log(`   âœ… Found ${classifiedCount} classified chunks (took ${countDuration}ms)`);
 
     if (classifiedCount === 0) {
-      console.log('   ℹ️ No chunks to clear');
+      console.log('   â„¹ï¸ No chunks to clear');
       return NextResponse.json({
         status: 'success',
         cleared: 0,
@@ -349,14 +349,14 @@ export async function DELETE() {
     }
 
     // Now clear all classifications (UPDATE without RETURNING is faster)
-    console.log(`   🔄 Clearing ${classifiedCount} classifications...`);
+    console.log(`   ðŸ”„ Clearing ${classifiedCount} classifications...`);
     const updateStart = Date.now();
     const result = await query('UPDATE chunks SET subject = NULL');
     const updateDuration = Date.now() - updateStart;
     const clearedCount = result.rowCount || 0;
 
     const totalDuration = Date.now() - startTime;
-    console.log(`✅ Cleared ${clearedCount} classifications in ${totalDuration}ms (count: ${countDuration}ms, update: ${updateDuration}ms)`);
+    console.log(`âœ… Cleared ${clearedCount} classifications in ${totalDuration}ms (count: ${countDuration}ms, update: ${updateDuration}ms)`);
 
     return NextResponse.json({
       status: 'success',
@@ -365,7 +365,7 @@ export async function DELETE() {
     });
   } catch (error) {
     const totalDuration = Date.now() - startTime;
-    console.error(`❌ Failed to clear classifications after ${totalDuration}ms:`, error);
+    console.error(`âŒ Failed to clear classifications after ${totalDuration}ms:`, error);
     return NextResponse.json(
       {
         error: 'Failed to clear classifications',
