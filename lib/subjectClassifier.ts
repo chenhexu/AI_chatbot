@@ -209,7 +209,7 @@ Respond with ONLY the category names separated by commas, nothing else. Example:
 
   try {
     const result = await model.generateContent(prompt);
-    const categories = result.response.text()
+    let categories = result.response.text()
       .trim()
       .toLowerCase()
       .split(',')

@@ -5,6 +5,7 @@ import { generateChatResponse } from '@/lib/openai';
 import { loadAllChunks } from '@/lib/database/documentStore';
 import { query } from '@/lib/database/client';
 import { classifyQuerySubject } from '@/lib/subjectClassifier';
+import { expandAndTranslateQuery } from '@/lib/queryExpander';
 import os from 'os';
 
 // Cache document chunks in memory (in production, consider using Redis or similar)
@@ -200,7 +201,20 @@ export async function POST(request: NextRequest) {
       console.log(`[${requestId}] ⏭️ Subject classification disabled (ENABLE_SUBJECT_FILTER=false), using all chunks`);
     }
 
-    // Step 2: Load chunks filtered by subject (much faster!)
+    // Step 2: Expand and translate query for better retrieval (Gemini)
+    const expandStartCpu = process.cpuUsage();
+    let expandedQuery = message;
+    try {
+      expandedQuery = await expandAndTranslateQuery(message);
+      logCpuUsage(requestId, 'Query Expansion/Translation', expandStartCpu);
+      console.log(`[${requestId}] 🔍 Expanded query: "${expandedQuery.substring(0, 200)}${expandedQuery.length > 200 ? '...' : ''}"`);
+    } catch (error) {
+      logCpuUsage(requestId, 'Query Expansion/Translation (failed)', expandStartCpu);
+      console.error(`[${requestId}] ⚠️ Query expansion failed, using original query:`, error);
+      expandedQuery = message; // Fallback to original
+    }
+
+    // Step 3: Load chunks filtered by subject (much faster!)
     const chunkLoadStartCpu = process.cpuUsage();
     const chunkLoadStartTime = Date.now();
     let chunks: TextChunk[];
@@ -240,10 +254,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Step 3: Generate response using selected AI provider with RAG
+    // Step 4: Generate response using selected AI provider with RAG (using expanded query)
     const ragStartCpu = process.cpuUsage();
     const ragStartTime = Date.now();
-    const response = await generateChatResponse(message, chunks, requestId, provider);
+    const response = await generateChatResponse(message, chunks, requestId, provider, expandedQuery);
     const ragTime = Date.now() - ragStartTime;
     logCpuUsage(requestId, `RAG + AI Response (${ragTime}ms)`, ragStartCpu);
     

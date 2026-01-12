@@ -19,7 +19,7 @@ function getOpenAIClient(): OpenAI {
 // Initialize Gemini client
 let geminiClient: GoogleGenerativeAI | null = null;
 
-function getGeminiClient(): GoogleGenerativeAI {
+export function getGeminiClient(): GoogleGenerativeAI {
   if (!geminiClient) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
@@ -33,7 +33,7 @@ function getGeminiClient(): GoogleGenerativeAI {
 /**
  * Get Gemini model name from environment variable, with fallback
  */
-function getGeminiModel(): string {
+export function getGeminiModel(): string {
   return process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite';
 }
 
@@ -92,22 +92,24 @@ export async function generateChatResponse(
   userMessage: string,
   documentChunks: TextChunk[],
   requestId?: string,
-  provider: 'openai' | 'gemini' = 'openai'
+  provider: 'openai' | 'gemini' = 'openai',
+  expandedQuery?: string
 ): Promise<string> {
   const logPrefix = requestId ? `[${requestId}]` : '';
   
   // Use Gemini if specified
   if (provider === 'gemini') {
-    return generateGeminiChatResponse(userMessage, documentChunks, requestId);
+    return generateGeminiChatResponse(userMessage, documentChunks, requestId, expandedQuery);
   }
   
   const client = getOpenAIClient();
   // Use gpt-4o-mini as the default model (fast and cheap)
   const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
   
-  // Find relevant chunks directly (skip translation for speed)
+  // Find relevant chunks using expanded query if provided
+  const searchQuery = expandedQuery || userMessage;
   console.log(`${logPrefix} 🔎 Finding relevant chunks...`);
-  const uniqueChunks = findRelevantChunks(documentChunks, userMessage, 5);
+  const uniqueChunks = findRelevantChunks(documentChunks, searchQuery, 5);
   const context = buildContextString(uniqueChunks);
   console.log(`${logPrefix} ✅ Found ${uniqueChunks.length} chunks`);
   
@@ -249,14 +251,16 @@ ${truncatedContext || (isEnglish ? 'No specific context available. Please inform
 async function generateGeminiChatResponse(
   userMessage: string,
   documentChunks: TextChunk[],
-  requestId?: string
+  requestId?: string,
+  expandedQuery?: string
 ): Promise<string> {
   const logPrefix = requestId ? `[${requestId}]` : '';
   const client = getGeminiClient();
   const model = client.getGenerativeModel({ model: getGeminiModel() });
   
-  // Find relevant chunks using both original and translated query
-  const relevantChunks = findRelevantChunks(documentChunks, userMessage, 6);
+  // Find relevant chunks using expanded query if provided
+  const searchQuery = expandedQuery || userMessage;
+  const relevantChunks = findRelevantChunks(documentChunks, searchQuery, 6);
   const context = buildContextString(relevantChunks);
   
   // Limit context size
