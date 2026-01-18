@@ -205,7 +205,9 @@ ${truncatedContext || (isEnglish ? 'No specific context available. Please inform
   const userPrompt = userMessage;
 
   try {
-    console.log(`${logPrefix} 🤖 Calling OpenAI with model: ${model}`);
+    console.log(`${logPrefix} 🤖 [AI CALL] OpenAI (${model}) - Chat Response Generation`);
+    console.log(`${logPrefix}    User message: "${userMessage.substring(0, 150)}${userMessage.length > 150 ? '...' : ''}"`);
+    console.log(`${logPrefix}    Context chunks: ${uniqueChunks.length}, Context length: ${truncatedContext.length} chars`);
     
     // Add timeout to prevent Render from killing the request
     const timeoutMs = 25000; // 25 seconds (Render has 30s limit)
@@ -225,6 +227,7 @@ ${truncatedContext || (isEnglish ? 'No specific context available. Please inform
       
       clearTimeout(timeoutId);
       const answer = response.choices[0]?.message?.content || defaultErrorMessage;
+      console.log(`${logPrefix}    Response: "${answer.substring(0, 150)}${answer.length > 150 ? '...' : ''}" (${answer.length} chars)`);
       console.log(`${logPrefix} ✅ Response received (${answer.length} chars)`);
       return answer;
     } catch (apiError: unknown) {
@@ -298,7 +301,10 @@ User question: ${userMessage}
 Answer:`;
 
   try {
-    console.log(`${logPrefix} 🤖 Calling Gemini (${getGeminiModel()})`);
+    const modelName = getGeminiModel();
+    console.log(`${logPrefix} 🤖 [AI CALL] Gemini (${modelName}) - Chat Response Generation`);
+    console.log(`${logPrefix}    User message: "${userMessage.substring(0, 150)}${userMessage.length > 150 ? '...' : ''}"`);
+    console.log(`${logPrefix}    Context chunks: ${relevantChunks.length}, Context length: ${truncatedContext.length} chars`);
     
     // Add timeout
     const timeoutMs = 25000;
@@ -312,6 +318,7 @@ Answer:`;
     ]);
     
     const answer = result.response.text();
+    console.log(`${logPrefix}    Response: "${answer.substring(0, 150)}${answer.length > 150 ? '...' : ''}" (${answer.length} chars)`);
     console.log(`${logPrefix} ✅ Gemini response received (${answer.length} chars)`);
     return answer;
   } catch (error) {

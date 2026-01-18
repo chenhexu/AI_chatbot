@@ -796,8 +796,32 @@ export function findRelevantChunks(
   const similarityStartCpu = process.cpuUsage();
   const similarityStartTime = Date.now();
   
-  // Calculate similarity scores
-  const scoredChunks = chunks.map((chunk, originalIndex) => ({
+  // Filter out CSS/JS chunks before similarity calculation
+  const contentChunks = chunks.filter(chunk => {
+    if (!chunk.source) return true;
+    const sourceLower = chunk.source.toLowerCase();
+    // Exclude CSS, JS, minified files
+    if (sourceLower.includes('.css') || 
+        sourceLower.includes('.js') || 
+        sourceLower.includes('.min.') || 
+        sourceLower.includes('stylesheet') ||
+        sourceLower.includes('block-library') || 
+        sourceLower.includes('metaslider') ||
+        sourceLower.includes('assets_css') ||
+        sourceLower.includes('assets_js')) {
+      return false;
+    }
+    // Also filter chunks that are mostly CSS-like content
+    const textPreview = chunk.text.substring(0, 200).toLowerCase();
+    const hasCssPatterns = (textPreview.match(/[{;}]/g) || []).length > 10 || 
+                          textPreview.includes('@charset') ||
+                          textPreview.includes('@media') ||
+                          textPreview.startsWith('@');
+    return !hasCssPatterns;
+  });
+  
+  // Calculate similarity scores only on content chunks
+  const scoredChunks = contentChunks.map((chunk, originalIndex) => ({
     chunk,
     originalIndex,
     score: calculateSimilarity(query, chunk.text, chunk.source),
@@ -825,9 +849,9 @@ export function findRelevantChunks(
       .map(item => item.chunk);
   }
   
-  // Build index of chunks by source and index for neighbor lookup
+  // Build index of chunks by source and index for neighbor lookup (use filtered chunks)
   const chunkIndex = new Map<string, TextChunk[]>();
-  for (const chunk of chunks) {
+  for (const chunk of contentChunks) {
     if (!chunkIndex.has(chunk.source)) {
       chunkIndex.set(chunk.source, []);
     }

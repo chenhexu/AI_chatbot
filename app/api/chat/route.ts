@@ -178,6 +178,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Print separator for readability in logs
+    console.log(`\n${'='.repeat(80)}`);
     console.log(`[${requestId}] 📨 Received query: "${message}" (provider: ${provider})`);
     logCpuUsage(requestId, 'Request Start');
 
@@ -265,6 +267,7 @@ export async function POST(request: NextRequest) {
     const totalTime = Date.now() - requestStartTime;
     logCpuUsage(requestId, `Total Request (${totalTime}ms)`, requestStartCpu);
     console.log(`[${requestId}] ✅ Request completed in ${totalTime}ms`);
+    console.log(`${'='.repeat(80)}\n`);
 
     return NextResponse.json({ response, provider });
   } catch (error) {

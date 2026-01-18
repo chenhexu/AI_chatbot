@@ -183,19 +183,100 @@ ${preview}
 }
 
 /**
+ * Keyword-based classification fallback (no API call needed)
+ * Used when Gemini quota is exceeded or fails
+ */
+function classifyQueryByKeywords(query: string): Subject[] {
+  const queryLower = query.toLowerCase();
+  const categories: Subject[] = [];
+  
+  // Staff-related keywords
+  if (/\b(principal|directeur|directrice|director|teacher|professeur|enseignant|staff|administration|personnel|qui est|who is)\b/i.test(queryLower)) {
+    categories.push('staff');
+  }
+  
+  // Calendar/date-related keywords
+  if (/\b(quand|when|date|calendar|calendrier|schedule|horaire|début|start|end|fin|rentrée|ouverture|ouvert|opened|fermeture|holiday|vacation|vacances)\b/i.test(queryLower)) {
+    categories.push('calendar');
+  }
+  
+  // Code de vie / policies
+  if (/\b(code de vie|code of conduct|règlement|rules|policies|politique)\b/i.test(queryLower)) {
+    categories.push('general');
+  }
+  
+  // Academic keywords
+  if (/\b(cours|course|curriculum|grade|note|exam|examen|academic|académique|matiere|subject)\b/i.test(queryLower)) {
+    categories.push('academics');
+  }
+  
+  // Student life
+  if (/\b(étudiant|student|activité|activity|club|vie étudiante)\b/i.test(queryLower)) {
+    categories.push('students');
+  }
+  
+  // Sports
+  if (/\b(sport|athletic|athlétisme|équipe|team)\b/i.test(queryLower)) {
+    categories.push('sports');
+  }
+  
+  // Events
+  if (/\b(event|événement|celebration|célébration|spectacle|show)\b/i.test(queryLower)) {
+    categories.push('events');
+  }
+  
+  // Admissions
+  if (/\b(admission|inscription|enrollment|registration|inscrire|apply)\b/i.test(queryLower)) {
+    categories.push('admissions');
+  }
+  
+  // Parents
+  if (/\b(parent|parental|newsletter|bulletin)\b/i.test(queryLower)) {
+    categories.push('parents');
+  }
+  
+  // Recipes
+  if (/\b(recipe|recette|cuisine|cooking|food|ingrédient)\b/i.test(queryLower)) {
+    categories.push('recipes');
+  }
+  
+  // If no specific categories found, use general + other
+  if (categories.length === 0) {
+    return ['general', 'other'];
+  }
+  
+  // Always add 'general' as fallback, but keep other specific categories
+  if (!categories.includes('general')) {
+    categories.push('general');
+  }
+  
+  return categories.slice(0, 3); // Max 3 subjects
+}
+
+/**
  * Determine which subject a user query is about (very fast - just query analysis)
  */
 export async function classifyQuerySubject(query: string): Promise<Subject[]> {
+  // First try keyword-based classification (fast, no API call)
+  const keywordResult = classifyQueryByKeywords(query);
+  
+  // If keyword classification found specific categories (not just general+other), use it
+  // This provides a good fallback when Gemini quota is exceeded
+  const hasSpecificCategory = keywordResult.some(c => c !== 'general' && c !== 'other');
+  
+  // Try Gemini classification, but fall back to keywords if it fails
   const client = getGeminiClient();
   const model = client.getGenerativeModel({ model: getGeminiModel() });
   
   const prompt = `A user asked: "${query}"
 
-Which of these document categories might contain the answer? Choose 1-3 most relevant:
-- general: General school info, policies
+Which of these document categories might contain the answer? Choose 1-3 most relevant categories:
+
+IMPORTANT RULES:
+- staff: Use for questions about principal, director, teachers, administration, personnel, staff members, "qui est" (who is) questions about people
+- calendar: Use for dates, schedules, when school starts/ends/opens, "quand" (when) questions about dates
+- general: Use for school policies, codes of conduct ("code de vie"), general information about the school
 - academics: Courses, curriculum, grades
-- calendar: School calendar, dates, schedules, when school starts/ends
-- staff: Teachers, principal, administration
 - students: Student life, activities
 - parents: Parent information
 - recipes: Recipes, cooking, food
@@ -205,11 +286,19 @@ Which of these document categories might contain the answer? Choose 1-3 most rel
 - low_confidence: Low confidence classifications (to be reviewed)
 - other: Everything else
 
-Respond with ONLY the category names separated by commas, nothing else. Example: "calendar,general"`;
+Be specific: If asking about "principal" or "directeur", choose "staff", not "general".
+If asking about "code de vie" or school rules, choose "general".
+
+Respond with ONLY the category names separated by commas, nothing else. Example: "staff,general" or "calendar,general"`;
 
   try {
+    const modelName = getGeminiModel();
+    console.log(`🤖 [AI CALL] Gemini (${modelName}) - Classification`);
+    console.log(`   Input: "${query}"`);
+    
     const result = await model.generateContent(prompt);
-    let categories = result.response.text()
+    const responseText = result.response.text();
+    let categories = responseText
       .trim()
       .toLowerCase()
       .split(',')
@@ -222,7 +311,9 @@ Respond with ONLY the category names separated by commas, nothing else. Example:
     
     // Always include 'general' as fallback, and 'other' if nothing matches
     if (categories.length === 0) {
-      return ['general', 'other'];
+      console.log(`   Response: (empty - using keyword fallback)`);
+      console.log(`🔍 Classification method: Keyword-based (Gemini returned empty, using keyword fallback)`);
+      return keywordResult; // Use keyword fallback instead of generic fallback
     }
     
     // Add 'general' as fallback if not already included
@@ -230,10 +321,13 @@ Respond with ONLY the category names separated by commas, nothing else. Example:
       categories.push('general');
     }
     
+    console.log(`   Response: ${categories.join(', ')}`);
+    console.log(`🔍 Classification method: Gemini AI (${categories.join(', ')})`);
     return categories.slice(0, 3); // Max 3 subjects
   } catch (error) {
-    console.error('Query classification error:', error);
-    return ['general', 'other']; // Fallback to search all
+    // Gemini failed (quota, network, etc.) - use keyword-based classification
+    console.log(`🔍 Classification method: Keyword-based (Gemini failed: ${error instanceof Error ? error.message.substring(0, 100) : String(error).substring(0, 100)})`);
+    return keywordResult; // Return keyword-based result
   }
 }
 
