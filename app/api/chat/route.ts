@@ -222,10 +222,10 @@ export async function POST(request: NextRequest) {
       // Try to load from database with subject filter
       try {
         chunks = await loadAllChunks(querySubjects);
-        // If we got very few chunks, might be because chunks aren't classified yet
-        // Fallback to all chunks if filtered result is too small
-        if (chunks.length < 10) {
-          console.log(`[${requestId}] ⚠️ Only ${chunks.length} chunks found with subject filter, loading all chunks...`);
+        // Classification is complete - use filtered chunks (subject filtering is working)
+        if (chunks.length === 0) {
+          // Only fallback if we got zero chunks (likely a classification issue)
+          console.log(`[${requestId}] ⚠️ No chunks found with subject filter, loading all chunks as fallback...`);
           chunks = await loadAllChunks(); // Load all chunks
         } else {
           console.log(`[${requestId}] 🔍 Loaded ${chunks.length} chunks from subjects: ${querySubjects.join(', ')}`);
