@@ -75,4 +75,3 @@ jobs:
           app-name: 'ai-chatbot-chenhexu'
           slot-name: 'Production'
           package: .
-          
