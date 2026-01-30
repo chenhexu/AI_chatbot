@@ -1,5 +1,6 @@
 import { query } from './client';
 import { TextChunk } from '../rag';
+import { filterContentChunks } from '../utils/filters';
 
 export interface DocumentRecord {
   id: number;
@@ -115,35 +116,14 @@ export async function loadAllChunks(subjects?: string[]): Promise<TextChunk[]> {
     );
 
     console.log(`📊 Query returned ${result.rows.length} rows`);
-    const chunks = result.rows
-      .map(row => ({
+    const chunks = filterContentChunks(
+      result.rows.map(row => ({
         text: row.text,
         source: row.source,
         index: row.chunk_index,
         pdfUrl: row.pdf_url || undefined,
       }))
-      // Filter out CSS, JS, and other non-content files
-      .filter(chunk => {
-        const sourceLower = chunk.source.toLowerCase();
-        // Exclude CSS, JS, minified files, stylesheets
-        if (sourceLower.includes('.css') || 
-            sourceLower.includes('.js') || 
-            sourceLower.includes('.min.') || 
-            sourceLower.includes('stylesheet') ||
-            sourceLower.includes('block-library') || 
-            sourceLower.includes('metaslider') ||
-            sourceLower.includes('assets_css') ||
-            sourceLower.includes('assets_js')) {
-          return false;
-        }
-        // Also filter chunks that are mostly CSS-like content (lots of curly braces, semicolons)
-        const textPreview = chunk.text.substring(0, 200).toLowerCase();
-        const hasCssPatterns = (textPreview.match(/[{;}]/g) || []).length > 10 || 
-                              textPreview.includes('@charset') ||
-                              textPreview.includes('@media') ||
-                              textPreview.startsWith('@');
-        return !hasCssPatterns;
-      });
+    );
     
     console.log(`✅ Successfully loaded ${chunks.length} chunks from database (filtered ${result.rows.length - chunks.length} CSS/JS chunks)`);
     return chunks;

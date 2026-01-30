@@ -169,16 +169,8 @@ export async function POST(request: Request) {
                 throw new Error('Classification cancelled');
               }
 
-              await query('UPDATE chunks SET subject = $1 WHERE id = $2', [subject, chunk.id]);
-              await query('DELETE FROM failed_classifications WHERE chunk_id = $1', [chunk.id]);
-              
-              lastProcessedId = Math.max(lastProcessedId, chunk.id);
-              classificationState.lastProcessedId = lastProcessedId;
-              
-              classified++;
-              console.log(`\u001b[32mClassified chunk ${chunk.id} as "${subject}"\u001b[0m`);
-              
-              return { success: true, chunkId: chunk.id };
+              // Return classification result for batch update (optimized)
+              return { success: true, chunkId: chunk.id, subject };
             } catch (error: any) {
               if (signal.aborted) {
                 console.log(`\u001b[33mClassification cancelled for chunk ${chunk.id}\u001b[0m`);
@@ -197,9 +189,44 @@ export async function POST(request: Request) {
 
           const results = await Promise.all(promises);
           
+          // Batch update successful classifications (optimized - batch operations)
+          const successful = results.filter(r => r.success && 'subject' in r) as Array<{ chunkId: number; subject: string }>;
+          if (successful.length > 0) {
+            const updateIds = successful.map(r => r.chunkId);
+            
+            // Batch UPDATE using VALUES clause with JOIN (more efficient than individual queries)
+            // Build VALUES clause: (id1, subject1), (id2, subject2), ...
+            const values = successful.map((r, i) => `($${i * 2 + 1}, $${i * 2 + 2})`).join(', ');
+            const params = successful.flatMap(r => [r.chunkId, r.subject]);
+            
+            await query(
+              `UPDATE chunks c
+               SET subject = v.subject
+               FROM (VALUES ${values}) AS v(id, subject)
+               WHERE c.id = v.id`,
+              params
+            );
+            
+            // Batch DELETE failed_classifications (optimized)
+            await query(
+              'DELETE FROM failed_classifications WHERE chunk_id = ANY($1::int[])',
+              [updateIds]
+            );
+            
+            // Update last processed ID
+            const maxId = Math.max(...updateIds);
+            lastProcessedId = Math.max(lastProcessedId, maxId);
+            classificationState.lastProcessedId = lastProcessedId;
+            
+            classified += successful.length;
+            successful.forEach(r => {
+              console.log(`\u001b[32mClassified chunk ${r.chunkId} as "${r.subject}"\u001b[0m`);
+            });
+          }
+          
           // Check if any succeeded (if all failed and aborted, break)
-          const successful = results.filter(r => r.success).length;
-          if (successful === 0 && signal.aborted) {
+          const successCount = results.filter(r => r.success).length;
+          if (successCount === 0 && signal.aborted) {
             break;
           }
 

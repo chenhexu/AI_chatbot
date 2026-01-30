@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { findRelevantChunks, buildContextString, type TextChunk } from './rag';
+import { detectLanguage, getLanguageMessages } from './utils/filters';
 
 // Initialize OpenAI client
 let openaiClient: OpenAI | null = null;
@@ -142,44 +143,15 @@ export async function generateChatResponse(
     }
   });
   
-  // Detect language from user message (simple heuristic)
-  const detectLanguage = (text: string): 'en' | 'fr' => {
-    const lowerText = text.toLowerCase();
-    // Common English words
-    const englishWords = ['the', 'is', 'are', 'who', 'what', 'where', 'when', 'why', 'how', 'can', 'will', 'would', 'should', 'could'];
-    // Common French words
-    const frenchWords = ['le', 'la', 'les', 'qui', 'quoi', 'où', 'quand', 'pourquoi', 'comment', 'peut', 'peuvent', 'sera', 'serait', 'devrait'];
-    
-    let englishCount = 0;
-    let frenchCount = 0;
-    
-    for (const word of englishWords) {
-      if (lowerText.includes(word)) englishCount++;
-    }
-    for (const word of frenchWords) {
-      if (lowerText.includes(word)) frenchCount++;
-    }
-    
-    // If more English indicators, return English, otherwise default to French
-    return englishCount > frenchCount ? 'en' : 'fr';
-  };
-  
+  // Detect language from user message (using shared utility)
   const detectedLanguage = detectLanguage(userMessage);
   const isEnglish = detectedLanguage === 'en';
   
-  // Build language-specific error messages
-  const errorMessage = isEnglish 
-    ? "I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?"
-    : "Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'école?";
-  
-  const defaultErrorMessage = isEnglish
-    ? "Sorry, I couldn't generate a response. Please try again."
-    : "Désolé, je n'ai pas pu générer de réponse. Veuillez réessayer.";
-  
-  // Build system prompt with explicit language instruction
-  const languageInstruction = isEnglish 
-    ? `**CRITICAL LANGUAGE RULE**: The user's question is in ENGLISH. You MUST respond in ENGLISH only. Do not respond in French.`
-    : `**RÈGLE DE LANGUE CRITIQUE**: La question de l'utilisateur est en FRANÇAIS. Vous DEVEZ répondre en FRANÇAIS uniquement.`;
+  // Get language-specific messages (using shared utility)
+  const langMessages = getLanguageMessages(detectedLanguage);
+  const errorMessage = langMessages.noInfo;
+  const defaultErrorMessage = langMessages.defaultError;
+  const languageInstruction = langMessages.languageInstruction;
   
   const systemPrompt = `You are a helpful AI assistant for Collège Saint-Louis, a French secondary school in Quebec, Canada. 
 Your role is to answer questions about the school based on the information provided to you.
@@ -234,9 +206,7 @@ ${truncatedContext || (isEnglish ? 'No specific context available. Please inform
       clearTimeout(timeoutId);
       if (apiError instanceof Error && apiError.name === 'AbortError') {
         console.error(`${logPrefix} ⏱️ OpenAI request timed out after ${timeoutMs}ms`);
-        return isEnglish 
-          ? "The request took too long. Please try again with a simpler question."
-          : "La requête a pris trop de temps. Veuillez réessayer avec une question plus simple.";
+        return langMessages.timeout;
       }
       throw apiError;
     }
@@ -274,13 +244,11 @@ async function generateGeminiChatResponse(
   
   console.log(`${logPrefix} Query: "${userMessage}" - Found ${relevantChunks.length} relevant chunks (Gemini)`);
   
-  // Detect language
-  const isEnglish = /\b(the|is|are|who|what|where|when|why|how|can|will)\b/i.test(userMessage);
-  
-  const errorMessage = isEnglish 
-    ? "I cannot answer this question with the information I have."
-    : "Je ne peux pas répondre à cette question avec les informations dont je dispose.";
-  
+  // Detect language (using shared utility)
+  const detectedLanguage = detectLanguage(userMessage);
+  const isEnglish = detectedLanguage === 'en';
+  const langMessages = getLanguageMessages(detectedLanguage);
+  const errorMessage = langMessages.noInfo;
   const languageInstruction = isEnglish 
     ? 'Respond in ENGLISH only.'
     : 'Répondez en FRANÇAIS uniquement.';
@@ -324,10 +292,8 @@ Answer:`;
   } catch (error) {
     if (error instanceof Error && error.message === 'Gemini timeout') {
       console.error(`${logPrefix} ⏱️ Gemini request timed out`);
-      const isEnglish = /\b(the|is|are|who|what|where|when|why|how|can|will)\b/i.test(userMessage);
-      return isEnglish 
-        ? "The request took too long. Please try again."
-        : "La requête a pris trop de temps. Veuillez réessayer.";
+      const detectedLanguage = detectLanguage(userMessage);
+      return getLanguageMessages(detectedLanguage).timeout;
     }
     console.error('Gemini API error:', error);
     throw new Error(

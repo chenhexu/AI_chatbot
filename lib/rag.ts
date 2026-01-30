@@ -1,4 +1,5 @@
 import levenshtein from 'fast-levenshtein';
+import { isNonContentChunk } from './utils/filters';
 
 export interface TextChunk {
   text: string;
@@ -166,30 +167,34 @@ export function chunkText(text: string, chunkSize: number = 1500, overlap: numbe
  * Improved to give much higher scores to chunks with actual relevant content
  */
 export function calculateSimilarity(query: string, text: string, source?: string): number {
-  const queryLower = query.toLowerCase();
-  const textLower = text.toLowerCase();
-  
-  // Penalize CSS/JS/minified files - they're not useful content
-  if (source) {
-    const sourceLower = source.toLowerCase();
-    if (sourceLower.includes('.css') || sourceLower.includes('.js') || 
-        sourceLower.includes('.min.') || sourceLower.includes('stylesheet') ||
-        sourceLower.includes('block-library') || sourceLower.includes('metaslider')) {
-      // Reduce score by 80% for CSS/JS files
-      const baseScore = calculateSimilarityInternal(query, text);
-      return baseScore * 0.2;
-    }
+  // Use shared utility for non-content check (optimized)
+  if (isNonContentChunk(source, text)) {
+    const baseScore = calculateSimilarityInternal(query, text);
+    return baseScore * 0.2; // Reduce score by 80% for CSS/JS files
   }
   
   return calculateSimilarityInternal(query, text);
 }
 
+// Cache for compiled regex patterns (performance optimization)
+const wordBoundaryCache = new Map<string, RegExp>();
+
+function getWordBoundaryRegex(word: string): RegExp {
+  if (!wordBoundaryCache.has(word)) {
+    wordBoundaryCache.set(word, new RegExp(`\\b${word}\\b`, 'i'));
+  }
+  return wordBoundaryCache.get(word)!;
+}
+
 function calculateSimilarityInternal(query: string, text: string): number {
+  // Cache lowercase conversions (used multiple times)
   const queryLower = query.toLowerCase();
   const textLower = text.toLowerCase();
   
-  // Remove common French stop words and punctuation
-  const stopWords = new Set(['le', 'la', 'les', 'de', 'du', 'des', 'un', 'une', 'et', 'ou', 'qui', 'que', 'quoi', 'dont', 'où', 'sont', 'est', 'avez', 'a', 'ont', 'son', 'son', 'sont']);
+  // Remove common French stop words and punctuation (cached set)
+  const stopWords = new Set(['le', 'la', 'les', 'de', 'du', 'des', 'un', 'une', 'et', 'ou', 'qui', 'que', 'quoi', 'dont', 'où', 'sont', 'est', 'avez', 'a', 'ont', 'son', 'sont']);
+  
+  // Pre-process query words once (optimized)
   const queryWords = queryLower
     .replace(/[^\w\s]/g, ' ')
     .split(/\s+/)
@@ -291,8 +296,8 @@ function calculateSimilarityInternal(query: string, text: string): number {
   const isProjetPersonnelQuery = hasProjetPersonnel;
   
   for (const word of queryWords) {
-    // Exact word match (case-insensitive)
-    const wordBoundaryRegex = new RegExp(`\\b${word}\\b`, 'i');
+    // Exact word match (case-insensitive) - use cached regex
+    const wordBoundaryRegex = getWordBoundaryRegex(word);
     const isCommonWord = commonWords.has(word);
     
     // Special handling for activity names - give them very high weight
@@ -433,10 +438,16 @@ function calculateSimilarityInternal(query: string, text: string): number {
   };
   
   let relatedMatches = 0;
+  // Cache regex patterns for related terms (optimization)
+  const relatedRegexCache = new Map<string, RegExp>();
   for (const word of queryWords) {
     if (relatedTerms[word]) {
       for (const related of relatedTerms[word]) {
-        const relatedRegex = new RegExp(`\\b${related}\\b`, 'i');
+        let relatedRegex = relatedRegexCache.get(related);
+        if (!relatedRegex) {
+          relatedRegex = new RegExp(`\\b${related}\\b`, 'i');
+          relatedRegexCache.set(related, relatedRegex);
+        }
         if (relatedRegex.test(textLower)) {
           relatedMatches += 1;
           break;
@@ -445,7 +456,7 @@ function calculateSimilarityInternal(query: string, text: string): number {
     }
     // Also try fuzzy matching for common typos (directice -> directrice)
     if (word === 'directice' || word === 'directrice') {
-      const fuzzyRegex = /directr?ice/i;
+      const fuzzyRegex = /directr?ice/i; // This regex is simple, no need to cache
       if (fuzzyRegex.test(textLower)) {
         relatedMatches += 1;
       }
@@ -796,29 +807,8 @@ export function findRelevantChunks(
   const similarityStartCpu = process.cpuUsage();
   const similarityStartTime = Date.now();
   
-  // Filter out CSS/JS chunks before similarity calculation
-  const contentChunks = chunks.filter(chunk => {
-    if (!chunk.source) return true;
-    const sourceLower = chunk.source.toLowerCase();
-    // Exclude CSS, JS, minified files
-    if (sourceLower.includes('.css') || 
-        sourceLower.includes('.js') || 
-        sourceLower.includes('.min.') || 
-        sourceLower.includes('stylesheet') ||
-        sourceLower.includes('block-library') || 
-        sourceLower.includes('metaslider') ||
-        sourceLower.includes('assets_css') ||
-        sourceLower.includes('assets_js')) {
-      return false;
-    }
-    // Also filter chunks that are mostly CSS-like content
-    const textPreview = chunk.text.substring(0, 200).toLowerCase();
-    const hasCssPatterns = (textPreview.match(/[{;}]/g) || []).length > 10 || 
-                          textPreview.includes('@charset') ||
-                          textPreview.includes('@media') ||
-                          textPreview.startsWith('@');
-    return !hasCssPatterns;
-  });
+  // Filter out CSS/JS chunks before similarity calculation (using shared utility)
+  const contentChunks = chunks.filter(chunk => !isNonContentChunk(chunk.source, chunk.text));
   
   // Calculate similarity scores only on content chunks
   const scoredChunks = contentChunks.map((chunk, originalIndex) => ({
