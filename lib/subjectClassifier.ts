@@ -334,9 +334,9 @@ Respond with ONLY the category names separated by commas, nothing else. Example:
       .trim()
       .toLowerCase()
       .split(',')
-      .map(c => c.trim())
-      .filter(c => SUBJECTS.includes(c as Subject))
-      .map(c => c as Subject);
+      .map((c: string) => c.trim())
+      .filter((c: string) => SUBJECTS.includes(c as Subject))
+      .map((c: string) => c as Subject);
     
     // Filter out 'low_confidence' - don't search in low confidence chunks
     categories = categories.filter(c => c !== 'low_confidence');
@@ -372,9 +372,9 @@ Respond with ONLY the category names separated by commas, nothing else. Example:
         .trim()
         .toLowerCase()
         .split(',')
-        .map(c => c.trim())
-        .filter(c => SUBJECTS.includes(c as Subject))
-        .map(c => c as Subject);
+        .map((c: string) => c.trim())
+        .filter((c: string) => SUBJECTS.includes(c as Subject))
+        .map((c: string) => c as Subject);
       
       // Filter out 'low_confidence' - don't search in low confidence chunks
       categories = categories.filter(c => c !== 'low_confidence');
