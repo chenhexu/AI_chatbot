@@ -38,6 +38,31 @@ export function getGeminiModel(): string {
   return process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite';
 }
 
+// Initialize GLM-4.7 client (OpenAI-compatible API)
+let glmClient: OpenAI | null = null;
+
+/**
+ * Get GLM-4.7 client (OpenAI-compatible API from BigModel.cn)
+ */
+export function getGLMClient(): OpenAI {
+  if (!glmClient) {
+    const apiKey = process.env.GLM_API_KEY || '9e4e9eb44cd54880abff2dbb1d96b6d2.cr8UJBSdL03lHRxX';
+    const baseURL = process.env.GLM_BASE_URL || 'https://open.bigmodel.cn/api/coding/paas/v4';
+    glmClient = new OpenAI({
+      apiKey,
+      baseURL,
+    });
+  }
+  return glmClient;
+}
+
+/**
+ * Get GLM model name
+ */
+export function getGLMModel(): string {
+  return process.env.GLM_MODEL || 'GLM-4.7';
+}
+
 /**
  * Translate query to French for better matching with French documents
  * Uses free Google Translate API (no API key needed) or OpenAI if preferred

@@ -169,7 +169,7 @@ export async function POST(request: NextRequest) {
   
   try {
     const body = await request.json();
-    const { message, provider = 'openai' } = body;
+    const { message, provider = 'openai', backgroundAI = 'gemini' } = body;
 
     if (!message || typeof message !== 'string') {
       return NextResponse.json(
@@ -183,7 +183,7 @@ export async function POST(request: NextRequest) {
     console.log(`[${requestId}] 📨 Received query: "${message}" (provider: ${provider})`);
     logCpuUsage(requestId, 'Request Start');
 
-    // Step 1: Classify query subject (fast Gemini call ~300ms) - can be disabled via env var
+    // Step 1: Classify query subject (fast AI call ~300ms) - can be disabled via env var
     const enableSubjectFilter = process.env.ENABLE_SUBJECT_FILTER !== 'false';
     let querySubjects: string[] = [];
     
@@ -191,7 +191,7 @@ export async function POST(request: NextRequest) {
       const subjectStartCpu = process.cpuUsage();
       console.log(`[${requestId}] 🧠 Classifying query subject...`);
       try {
-        querySubjects = await classifyQuerySubject(message);
+        querySubjects = await classifyQuerySubject(message, backgroundAI);
         logCpuUsage(requestId, 'Subject Classification', subjectStartCpu);
         console.log(`[${requestId}] ✅ Query subjects: ${querySubjects.join(', ')}`);
       } catch (error) {
@@ -203,11 +203,11 @@ export async function POST(request: NextRequest) {
       console.log(`[${requestId}] ⏭️ Subject classification disabled (ENABLE_SUBJECT_FILTER=false), using all chunks`);
     }
 
-    // Step 2: Expand and translate query for better retrieval (Gemini)
+    // Step 2: Expand and translate query for better retrieval
     const expandStartCpu = process.cpuUsage();
     let expandedQuery = message;
     try {
-      expandedQuery = await expandAndTranslateQuery(message);
+      expandedQuery = await expandAndTranslateQuery(message, backgroundAI);
       logCpuUsage(requestId, 'Query Expansion/Translation', expandStartCpu);
       console.log(`[${requestId}] 🔍 Expanded query: "${expandedQuery.substring(0, 200)}${expandedQuery.length > 200 ? '...' : ''}"`);
     } catch (error) {

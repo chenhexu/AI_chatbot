@@ -255,8 +255,9 @@ function classifyQueryByKeywords(query: string): Subject[] {
 
 /**
  * Determine which subject a user query is about (very fast - just query analysis)
+ * @param backgroundAI - AI model to use for background processing ('gemini' or 'glm')
  */
-export async function classifyQuerySubject(query: string): Promise<Subject[]> {
+export async function classifyQuerySubject(query: string, backgroundAI: 'gemini' | 'glm' = 'gemini'): Promise<Subject[]> {
   // First try keyword-based classification (fast, no API call)
   const keywordResult = classifyQueryByKeywords(query);
   
@@ -264,9 +265,28 @@ export async function classifyQuerySubject(query: string): Promise<Subject[]> {
   // This provides a good fallback when Gemini quota is exceeded
   const hasSpecificCategory = keywordResult.some(c => c !== 'general' && c !== 'other');
   
-  // Try Gemini classification, but fall back to keywords if it fails
-  const client = getGeminiClient();
-  const model = client.getGenerativeModel({ model: getGeminiModel() });
+  // Try AI classification (Gemini or GLM), but fall back to keywords if it fails
+  let useGLM = false;
+  let client: any = null;
+  let model: any = null;
+  
+  if (backgroundAI === 'glm') {
+    try {
+      const { getGLMClient, getGLMModel } = await import('./openai');
+      client = getGLMClient();
+      const modelName = getGLMModel();
+      useGLM = true;
+      console.log(`🤖 [AI CALL] GLM-4.7 (${modelName}) - Classification`);
+    } catch (error) {
+      console.warn('GLM client not available, falling back to Gemini:', error);
+      // Fall back to Gemini
+      client = getGeminiClient();
+      model = client.getGenerativeModel({ model: getGeminiModel() });
+    }
+  } else {
+    client = getGeminiClient();
+    model = client.getGenerativeModel({ model: getGeminiModel() });
+  }
   
   const prompt = `A user asked: "${query}"
 
@@ -292,12 +312,24 @@ If asking about "code de vie" or school rules, choose "general".
 Respond with ONLY the category names separated by commas, nothing else. Example: "staff,general" or "calendar,general"`;
 
   try {
-    const modelName = getGeminiModel();
-    console.log(`🤖 [AI CALL] Gemini (${modelName}) - Classification`);
-    console.log(`   Input: "${query}"`);
-    
-    const result = await model.generateContent(prompt);
-    const responseText = result.response.text();
+    if (useGLM && client) {
+      // Use GLM-4.7 (OpenAI-compatible)
+      const { getGLMModel } = await import('./openai');
+      const modelName = getGLMModel();
+      console.log(`🤖 [AI CALL] GLM-4.7 (${modelName}) - Classification`);
+      console.log(`   Input: "${query}"`);
+      
+      const response = await client.chat.completions.create({
+        model: modelName,
+        messages: [
+          { role: 'system', content: 'You are a classification assistant. Return only category names separated by commas.' },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.1,
+        max_tokens: 50,
+      });
+      
+      const responseText = response.choices[0]?.message?.content?.trim() || '';
     let categories = responseText
       .trim()
       .toLowerCase()
@@ -309,24 +341,90 @@ Respond with ONLY the category names separated by commas, nothing else. Example:
     // Filter out 'low_confidence' - don't search in low confidence chunks
     categories = categories.filter(c => c !== 'low_confidence');
     
-    // Always include 'general' as fallback, and 'other' if nothing matches
-    if (categories.length === 0) {
-      console.log(`   Response: (empty - using keyword fallback)`);
-      console.log(`🔍 Classification method: Keyword-based (Gemini returned empty, using keyword fallback)`);
-      return keywordResult; // Use keyword fallback instead of generic fallback
+      // Filter out 'low_confidence' - don't search in low confidence chunks
+      categories = categories.filter(c => c !== 'low_confidence');
+      
+      // Always include 'general' as fallback, and 'other' if nothing matches
+      if (categories.length === 0) {
+        console.log(`   Response: (empty - using keyword fallback)`);
+        console.log(`🔍 Classification method: Keyword-based (GLM-4.7 returned empty, using keyword fallback)`);
+        return keywordResult; // Use keyword fallback instead of generic fallback
+      }
+      
+      // Add 'general' as fallback if not already included
+      if (!categories.includes('general')) {
+        categories.push('general');
+      }
+      
+      console.log(`   Response: ${categories.join(', ')}`);
+      console.log(`🔍 Classification method: GLM-4.7 AI (${categories.join(', ')})`);
+      return categories.slice(0, 3); // Max 3 subjects
+    } else {
+      // Use Gemini
+      const modelName = getGeminiModel();
+      console.log(`🤖 [AI CALL] Gemini (${modelName}) - Classification`);
+      console.log(`   Input: "${query}"`);
+      
+      const result = await model.generateContent(prompt);
+      const responseText = result.response.text();
+      
+      let categories = responseText
+        .trim()
+        .toLowerCase()
+        .split(',')
+        .map(c => c.trim())
+        .filter(c => SUBJECTS.includes(c as Subject))
+        .map(c => c as Subject);
+      
+      // Filter out 'low_confidence' - don't search in low confidence chunks
+      categories = categories.filter(c => c !== 'low_confidence');
+      
+      // Always include 'general' as fallback, and 'other' if nothing matches
+      if (categories.length === 0) {
+        console.log(`   Response: (empty - using keyword fallback)`);
+        console.log(`🔍 Classification method: Keyword-based (Gemini returned empty, using keyword fallback)`);
+        return keywordResult; // Use keyword fallback instead of generic fallback
+      }
+      
+      // Add 'general' as fallback if not already included
+      if (!categories.includes('general')) {
+        categories.push('general');
+      }
+      
+      console.log(`   Response: ${categories.join(', ')}`);
+      console.log(`🔍 Classification method: Gemini AI (${categories.join(', ')})`);
+      return categories.slice(0, 3); // Max 3 subjects
     }
-    
-    // Add 'general' as fallback if not already included
-    if (!categories.includes('general')) {
-      categories.push('general');
-    }
-    
-    console.log(`   Response: ${categories.join(', ')}`);
-    console.log(`🔍 Classification method: Gemini AI (${categories.join(', ')})`);
-    return categories.slice(0, 3); // Max 3 subjects
   } catch (error) {
-    // Gemini failed (quota, network, etc.) - use keyword-based classification
-    console.log(`🔍 Classification method: Keyword-based (Gemini failed: ${error instanceof Error ? error.message.substring(0, 100) : String(error).substring(0, 100)})`);
+    // AI failed (quota, network, etc.) - use keyword-based classification
+    const aiName = useGLM ? 'GLM-4.7' : 'Gemini';
+    console.log(`🔍 Classification method: Keyword-based (${aiName} failed: ${error instanceof Error ? error.message.substring(0, 100) : String(error).substring(0, 100)})`);
+    
+    // If GLM failed, try Gemini as fallback
+    if (useGLM && backgroundAI === 'glm') {
+      try {
+        console.log(`🔄 Trying Gemini as fallback for classification...`);
+        const geminiClient = getGeminiClient();
+        const geminiModel = geminiClient.getGenerativeModel({ model: getGeminiModel() });
+        const result = await geminiModel.generateContent(prompt);
+        const responseText = result.response.text();
+        let categories = responseText
+          .trim()
+          .toLowerCase()
+          .split(',')
+          .map(c => c.trim())
+          .filter(c => SUBJECTS.includes(c as Subject))
+          .map(c => c as Subject);
+        categories = categories.filter(c => c !== 'low_confidence');
+        if (categories.length === 0) return keywordResult;
+        if (!categories.includes('general')) categories.push('general');
+        console.log(`🔍 Classification method: Gemini AI (fallback, ${categories.join(', ')})`);
+        return categories.slice(0, 3);
+      } catch (fallbackError) {
+        console.log(`⚠️ Gemini fallback also failed, using keyword-based classification`);
+      }
+    }
+    
     return keywordResult; // Return keyword-based result
   }
 }

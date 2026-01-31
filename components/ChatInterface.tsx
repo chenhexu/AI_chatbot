@@ -23,6 +23,7 @@ export default function ChatInterface() {
   const [isLoading, setIsLoading] = useState(false);
   const [isPreloading, setIsPreloading] = useState(true);
   const [aiProvider, setAiProvider] = useState<'openai' | 'gemini'>('openai');
+  const [backgroundAI, setBackgroundAI] = useState<'gemini' | 'glm'>('gemini');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -70,7 +71,11 @@ export default function ChatInterface() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ message: userMessage.text, provider: aiProvider }),
+        body: JSON.stringify({ 
+          message: userMessage.text, 
+          provider: aiProvider,
+          backgroundAI: backgroundAI 
+        }),
       });
 
       if (!response.ok) {
@@ -134,17 +139,30 @@ export default function ChatInterface() {
               Assistant IA - Une fenêtre ouverte sur le monde
             </p>
           </div>
-          {/* AI Provider Selector */}
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-gray-500">AI:</label>
-            <select
-              value={aiProvider}
-              onChange={(e) => setAiProvider(e.target.value as 'openai' | 'gemini')}
-              className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="openai">OpenAI (gpt-4o-mini)</option>
-              <option value="gemini">Google Gemini</option>
-            </select>
+          {/* AI Provider Selectors */}
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-gray-500">Response AI:</label>
+              <select
+                value={aiProvider}
+                onChange={(e) => setAiProvider(e.target.value as 'openai' | 'gemini')}
+                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="openai">OpenAI (gpt-4o-mini)</option>
+                <option value="gemini">Google Gemini</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-gray-500">Background AI:</label>
+              <select
+                value={backgroundAI}
+                onChange={(e) => setBackgroundAI(e.target.value as 'gemini' | 'glm')}
+                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="gemini">Google Gemini</option>
+                <option value="glm">GLM-4.7</option>
+              </select>
+            </div>
           </div>
         </div>
       </header>
