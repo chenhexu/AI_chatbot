@@ -152,6 +152,16 @@ export async function generateChatResponse(
   if (uniqueChunks.length > 0) {
     console.log(`${logPrefix} Top chunk sources: ${uniqueChunks.slice(0, 3).map(c => c.source.split('/').pop()).join(', ')}`);
     // Log preview of top chunks to see what context is being used
+    // Also log if any chunks contain "info-parents" for debugging
+    const infoParentsChunks = uniqueChunks.filter(c => 
+      c.text.toLowerCase().includes('info-parents') || 
+      c.source.toLowerCase().includes('info-parents')
+    );
+    if (infoParentsChunks.length > 0) {
+      console.log(`${logPrefix} ✅ Found ${infoParentsChunks.length} chunks containing "info-parents"`);
+    } else {
+      console.log(`${logPrefix} ⚠️ No chunks containing "info-parents" found in top results`);
+    }
     uniqueChunks.slice(0, 2).forEach((chunk, i) => {
       const preview = chunk.text.substring(0, 200).replace(/\n/g, ' ');
       console.log(`${logPrefix}   Chunk ${i + 1} preview: ${preview}...`);
@@ -193,7 +203,14 @@ IMPORTANT RULES:
 - When answering recipe questions, provide complete and accurate information including all ingredients with measurements
 - **IMPORTANT**: When users ask for PDF links or download links, you MUST provide the PDF download links in a clear, natural format. ${isEnglish 
     ? 'For each PDF, format your response like: "You can download the PDF document by following this link: /api/pdf/[filename]".' 
-    : 'Pour chaque PDF, formatez votre réponse comme suit: "Vous pouvez télécharger le document PDF en suivant ce lien: /api/pdf/[nom du fichier PDF]".'} Use the exact filename from the "[PDF Documents disponibles:]" section (just the filename, no brackets or extra formatting). If multiple PDFs are available, list them clearly with separate links for each. Always include the full path /api/pdf/ followed by the exact filename.
+    : 'Pour chaque PDF, formatez votre réponse comme suit: "Vous pouvez télécharger le document PDF en suivant ce lien: /api/pdf/[nom du fichier PDF]".'} 
+  CRITICAL LINK FORMATTING RULES:
+  - Use the EXACT filename from the "[PDF Documents disponibles:]" section (copy it exactly, including the .pdf extension)
+  - Format links as: /api/pdf/[exact-filename-from-list]
+  - Do NOT add brackets, quotes, or any extra formatting around the filename
+  - Do NOT modify the filename (keep spaces, hyphens, and special characters as shown)
+  - If multiple PDFs are available, list them clearly with separate links for each
+  - Example: If the list shows "info-parents-janvier-2024.pdf", use exactly: /api/pdf/info-parents-janvier-2024.pdf
 
 Context information about Collège Saint-Louis:
 ${truncatedContext || (isEnglish ? 'No specific context available. Please inform the user that you need more information.' : 'Aucun contexte spécifique disponible. Veuillez informer l\'utilisateur que vous avez besoin de plus d\'informations.')}`;

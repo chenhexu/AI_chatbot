@@ -15,22 +15,26 @@ export async function GET(
     const resolvedParams = await params;
     const filename = resolvedParams.filename;
     
+    // Decode URL-encoded filename
+    const decodedFilename = decodeURIComponent(filename);
+    
     // Security: Only allow PDF files and prevent directory traversal
-    if (!filename.endsWith('.pdf') || filename.includes('..') || filename.includes('/')) {
+    if (!decodedFilename.endsWith('.pdf') || decodedFilename.includes('..') || decodedFilename.includes('/') || decodedFilename.includes('\\')) {
       return NextResponse.json(
         { error: 'Invalid filename' },
         { status: 400 }
       );
     }
     
-    // Resolve PDF file path
+    // Resolve PDF file path (use decoded filename)
     const baseDir = process.env.CRAWLER_DATA_FOLDER || './data/scraped';
-    const pdfPath = path.resolve(process.cwd(), baseDir, 'pdfs', filename);
+    const pdfPath = path.resolve(process.cwd(), baseDir, 'pdfs', decodedFilename);
     
     // Check if file exists
     if (!fs.existsSync(pdfPath)) {
+      console.error(`PDF not found: ${pdfPath} (requested filename: ${decodedFilename})`);
       return NextResponse.json(
-        { error: 'PDF file not found' },
+        { error: 'PDF file not found', filename: decodedFilename, path: pdfPath },
         { status: 404 }
       );
     }
@@ -38,12 +42,12 @@ export async function GET(
     // Read PDF file
     const pdfBuffer = fs.readFileSync(pdfPath);
     
-    // Return PDF with proper headers
+    // Return PDF with proper headers (use decoded filename for Content-Disposition)
     return new NextResponse(pdfBuffer, {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Content-Disposition': `attachment; filename="${decodedFilename}"; filename*=UTF-8''${encodeURIComponent(decodedFilename)}`,
         'Content-Length': pdfBuffer.length.toString(),
       },
     });

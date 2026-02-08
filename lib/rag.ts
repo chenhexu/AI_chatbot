@@ -652,10 +652,22 @@ function calculateSimilarityInternal(query: string, text: string): number {
       structuredDataBonus += 0.6; // High bonus for Info-parents content
     }
     
-    // Look for date patterns near Info-parents (month names, years)
-    if (/info[- ]?parents.*(janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre|\d{4})/i.test(textLower) ||
-        /(janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre|\d{4}).*info[- ]?parents/i.test(textLower)) {
+    // Look for date patterns near Info-parents (month names in French and English, years)
+    const monthPattern = '(janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre|january|february|march|april|may|june|july|august|september|october|november|december|\\d{4})';
+    if (new RegExp(`info[- ]?parents.*${monthPattern}`, 'i').test(textLower) ||
+        new RegExp(`${monthPattern}.*info[- ]?parents`, 'i').test(textLower)) {
       structuredDataBonus += 0.4; // Extra bonus for dates
+    }
+    
+    // Also check if query mentions a specific month/year and match it in text
+    const queryMonthMatch = queryLower.match(/(janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre|january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{4})/i);
+    if (queryMonthMatch) {
+      const [, month, year] = queryMonthMatch;
+      // Check if text contains both the month and year near info-parents
+      if (textLower.includes(month.toLowerCase()) && textLower.includes(year) && 
+          (textLower.includes('info-parents') || textLower.includes('info parents'))) {
+        structuredDataBonus += 0.5; // High bonus for exact month/year match
+      }
     }
   }
   
@@ -832,8 +844,19 @@ export function findRelevantChunks(
     .slice(0, maxChunks)
     .filter(item => item.score > 0);
   
+  // Debug logging for info-parents queries
+  if (query.toLowerCase().includes('info-parents') || query.toLowerCase().includes('info parents')) {
+    const topScores = scoredChunks.slice(0, 5).map(item => ({
+      source: item.chunk.source.split('/').pop() || item.chunk.source,
+      score: item.score.toFixed(3),
+      hasInfoParents: item.chunk.text.toLowerCase().includes('info-parents') || item.chunk.source.toLowerCase().includes('info-parents')
+    }));
+    console.log(`   🔍 Top 5 scores for "info-parents" query:`, topScores);
+  }
+  
   if (topChunks.length === 0) {
     // Fallback: return top chunks even with low scores
+    console.log(`   ⚠️ No chunks with score > 0, using fallback (top 3 chunks even with low scores)`);
     return scoredChunks
       .slice(0, Math.min(3, chunks.length))
       .map(item => item.chunk);
@@ -961,9 +984,38 @@ export function buildContextString(chunks: TextChunk[]): string {
   if (pdfUrls.size > 0) {
     context += '\n\n---\n\n[PDF Documents disponibles:]\n';
     Array.from(pdfUrls).forEach((url, idx) => {
-      // Extract filename from file://pdfs/filename.pdf
-      const fileName = url.replace('file://', '').split('/').pop() || url;
-      context += `${idx + 1}. ${fileName}\n   Lien de téléchargement: /api/pdf/${fileName}\n`;
+      // Extract filename from various URL formats:
+      // - file://pdfs/filename.pdf
+      // - file://C:/path/to/pdfs/filename.pdf
+      // - https://example.com/path/filename.pdf
+      let fileName: string;
+      if (url.startsWith('file://')) {
+        // Remove file:// prefix and extract filename
+        const pathPart = url.replace(/^file:\/\/+/, '');
+        // Handle both forward and backslashes
+        fileName = pathPart.replace(/\\/g, '/').split('/').pop() || url;
+      } else if (url.includes('/')) {
+        // HTTP/HTTPS URL or other path format
+        fileName = url.split('/').pop() || url;
+        // Remove query parameters if present
+        fileName = fileName.split('?')[0];
+      } else {
+        fileName = url;
+      }
+      
+      // Ensure filename ends with .pdf and is clean
+      if (!fileName.endsWith('.pdf')) {
+        // If it doesn't end with .pdf, try to extract from URL
+        const pdfMatch = url.match(/([^\/\\]+\.pdf)/i);
+        if (pdfMatch) {
+          fileName = pdfMatch[1];
+        }
+      }
+      
+      // Clean filename (remove any URL encoding or special chars that might cause issues)
+      fileName = decodeURIComponent(fileName);
+      
+      context += `${idx + 1}. ${fileName}\n   Lien de téléchargement: /api/pdf/${encodeURIComponent(fileName)}\n`;
     });
   }
   

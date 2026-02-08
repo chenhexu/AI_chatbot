@@ -42,9 +42,18 @@ function renderTextWithLinks(text: string, isUser: boolean): (string | JSX.Eleme
     // Add the clickable link
     const url = match[0];
     const isPdfLink = url.startsWith('/api/pdf/');
-    const displayText = isPdfLink 
+    let displayText = isPdfLink 
       ? url.replace('/api/pdf/', '') 
       : url;
+    
+    // Decode URL-encoded filenames for display (but keep href encoded)
+    if (isPdfLink) {
+      try {
+        displayText = decodeURIComponent(displayText);
+      } catch (e) {
+        // If decoding fails, use original
+      }
+    }
 
     parts.push(
       <a

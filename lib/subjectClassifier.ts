@@ -230,7 +230,11 @@ function classifyQueryByKeywords(query: string): Subject[] {
     categories.push('admissions');
   }
   
-  // Parents
+  // Parents - explicitly check for info-parents first
+  if (/\b(info[- ]?parents?|infos[- ]?parents?)\b/i.test(queryLower)) {
+    categories.push('parents');
+  }
+  // Other parent-related keywords
   if (/\b(parent|parental|newsletter|bulletin)\b/i.test(queryLower)) {
     categories.push('parents');
   }
@@ -298,7 +302,7 @@ IMPORTANT RULES:
 - general: Use for school policies, codes of conduct ("code de vie"), general information about the school
 - academics: Courses, curriculum, grades
 - students: Student life, activities
-- parents: Parent information
+- parents: Parent information, newsletters, "info-parents" documents, parent communications
 - recipes: Recipes, cooking, food
 - events: School events
 - admissions: Enrollment, registration
