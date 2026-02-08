@@ -1,0 +1,867 @@
+
+================================================================================
+BATCH TEST REPORT
+================================================================================
+
+Total Questions: 157
+Total Success: 55 (35.0%)
+Total Failed: 102 (65.0%)
+
+================================================================================
+FRENCH QUESTIONS
+================================================================================
+Total: 49
+Success: 21 (42.9%)
+Failed: 28 (57.1%)
+
+Failed Questions:
+  - [info-parents] info-parents septembre 2024
+    Error: No information found or response too short
+  - [info-parents] premier info-parents de l'année
+    Error: No information found or response too short
+  - [staff] qui dirige l'école?
+    Error: No information found or response too short
+  - [staff] administration de l'école
+    Error: No information found or response too short
+  - [staff] équipe administrative
+    Error: No information found or response too short
+  - [calendar] jours de classe
+    Error: No information found or response too short
+  - [general] règlement intérieur
+    Error: No information found or response too short
+  - [general] politique de l'école
+    Error: No information found or response too short
+  - [general] adresse de l'école
+    Error: No information found or response too short
+  - [general] téléphone de l'école
+    Error: No information found or response too short
+  - [general] email de l'école
+    Error: No information found or response too short
+  - [academics] programme académique
+    Error: Failed to generate response: 429 Rate limit reached for gpt-4.1-nano in organization org-OxyUjOf9IqbLWhWXWGRwoTCI on tokens per min (TPM): Limit 200000, Used 200000, Requested 3155. Please try again in 946ms. Visit https://platform.openai.com/account/rate-limits to learn more.
+  - [academics] système de notation
+    Error: No information found or response too short
+  - [academics] évaluation des élèves
+    Error: No information found or response too short
+  - [academics] matières enseignées
+    Error: No information found or response too short
+  - [academics] cours disponibles
+    Error: No information found or response too short
+  - [students] clubs étudiants
+    Error: No information found or response too short
+  - [students] vie scolaire
+    Error: No information found or response too short
+  - [students] activités pour étudiants
+    Error: Failed to generate response: 429 Rate limit reached for gpt-4.1-nano in organization org-OxyUjOf9IqbLWhWXWGRwoTCI on tokens per min (TPM): Limit 200000, Used 200000, Requested 2548. Please try again in 764ms. Visit https://platform.openai.com/account/rate-limits to learn more.
+  - [events] événements à venir
+    Error: Failed to generate response: 429 Rate limit reached for gpt-4.1-nano in organization org-OxyUjOf9IqbLWhWXWGRwoTCI on tokens per min (TPM): Limit 200000, Used 200000, Requested 5541. Please try again in 1.662s. Visit https://platform.openai.com/account/rate-limits to learn more.
+  - [events] célébrations
+    Error: Failed to generate response: 429 Rate limit reached for gpt-4.1-nano in organization org-OxyUjOf9IqbLWhWXWGRwoTCI on tokens per min (TPM): Limit 200000, Used 200000, Requested 1810. Please try again in 543ms. Visit https://platform.openai.com/account/rate-limits to learn more.
+  - [events] spectacles
+    Error: Failed to generate response: 429 Rate limit reached for gpt-4.1-nano in organization org-OxyUjOf9IqbLWhWXWGRwoTCI on tokens per min (TPM): Limit 200000, Used 200000, Requested 1544. Please try again in 463ms. Visit https://platform.openai.com/account/rate-limits to learn more.
+  - [admissions] documents requis
+    Error: No information found or response too short
+  - [admissions] frais de scolarité
+    Error: No information found or response too short
+  - [recipes] recettes disponibles
+    Error: No information found or response too short
+  - [recipes] menu de la cafétéria
+    Error: No information found or response too short
+  - [recipes] repas scolaires
+    Error: Failed to generate response: 429 Rate limit reached for gpt-4.1-nano in organization org-OxyUjOf9IqbLWhWXWGRwoTCI on tokens per min (TPM): Limit 200000, Used 200000, Requested 4071. Please try again in 1.221s. Visit https://platform.openai.com/account/rate-limits to learn more.
+  - [recipes] options végétariennes
+    Error: No information found or response too short
+
+================================================================================
+ENGLISH QUESTIONS
+================================================================================
+Total: 108
+Success: 34 (31.5%)
+Failed: 74 (68.5%)
+
+Failed Questions:
+  - [staff] who is the director?
+    Error: No information found or response too short
+  - [staff] what is the name of the school director?
+    Error: No information found or response too short
+  - [staff] tell me about the principal
+    Error: No information found or response too short
+  - [staff] who runs the school?
+    Error: No information found or response too short
+  - [staff] who are the teachers?
+    Error: No information found or response too short
+  - [staff] list the staff members
+    Error: No information found or response too short
+  - [calendar] when does school start?
+    Error: No information found or response too short
+  - [calendar] when does school end?
+    Error: No information found or response too short
+  - [calendar] when does the school year begin?
+    Error: No information found or response too short
+  - [calendar] quand commence l'école?
+    Error: No information found or response too short
+  - [calendar] when was the school opened?
+    Error: No information found or response too short
+  - [calendar] quand le collège a-t-il ouvert ses portes?
+    Error: No information found or response too short
+  - [calendar] what are the school holidays?
+    Error: No information found or response too short
+  - [calendar] quelles sont les vacances scolaires?
+    Error: Failed to generate response: 429 Rate limit reached for gpt-4.1-nano in organization org-OxyUjOf9IqbLWhWXWGRwoTCI on tokens per min (TPM): Limit 200000, Used 200000, Requested 1507. Please try again in 452ms. Visit https://platform.openai.com/account/rate-limits to learn more.
+  - [calendar] when is the next holiday?
+    Error: No information found or response too short
+  - [calendar] quand sont les prochaines vacances?
+    Error: No information found or response too short
+  - [calendar] what time does school start?
+    Error: No information found or response too short
+  - [general] is there a code of conduct?
+    Error: No information found or response too short
+  - [general] est-ce qu'il y a un code de vie?
+    Error: No information found or response too short
+  - [general] what is the code of conduct?
+    Error: No information found or response too short
+  - [general] what are the school rules?
+    Error: No information found or response too short
+  - [general] quels sont les règlements de l'école?
+    Error: No information found or response too short
+  - [general] tell me about the school policies
+    Error: No information found or response too short
+  - [general] what is the school's mission?
+    Error: No information found or response too short
+  - [general] what is the school address?
+    Error: No information found or response too short
+  - [general] where is the school located?
+    Error: No information found or response too short
+  - [general] how do I contact the school?
+    Error: No information found or response too short
+  - [general] comment contacter l'école?
+    Error: No information found or response too short
+  - [academics] what courses are offered?
+    Error: No information found or response too short
+  - [academics] quels cours sont offerts?
+    Error: No information found or response too short
+  - [academics] what is the curriculum?
+    Error: No information found or response too short
+  - [academics] what subjects are taught?
+    Error: No information found or response too short
+  - [academics] quelles matières sont enseignées?
+    Error: No information found or response too short
+  - [academics] how are grades calculated?
+    Error: No information found or response too short
+  - [academics] comment les notes sont-elles calculées?
+    Error: No information found or response too short
+  - [academics] what is the grading system?
+    Error: No information found or response too short
+  - [academics] tell me about the academic program
+    Error: No information found or response too short
+  - [students] what activities are available for students?
+    Error: No information found or response too short
+  - [students] are there any clubs?
+    Error: Failed to generate response: 429 Request too large for gpt-4.1-nano-long-context in organization org-OxyUjOf9IqbLWhWXWGRwoTCI on tokens per min (TPM): Limit 400000, Requested 422472. The input or output tokens must be reduced in order to run successfully. Visit https://platform.openai.com/account/rate-limits to learn more.
+  - [students] y a-t-il des clubs?
+    Error: No information found or response too short
+  - [students] quels sports sont disponibles?
+    Error: No information found or response too short
+  - [students] tell me about student life
+    Error: No information found or response too short
+  - [students] parlez-moi de la vie étudiante
+    Error: No information found or response too short
+  - [events] what events are happening?
+    Error: No information found or response too short
+  - [events] quels événements ont lieu?
+    Error: No information found or response too short
+  - [events] are there any upcoming events?
+    Error: Failed to generate response: 429 Request too large for gpt-4.1-nano-long-context in organization org-OxyUjOf9IqbLWhWXWGRwoTCI on tokens per min (TPM): Limit 400000, Requested 422475. The input or output tokens must be reduced in order to run successfully. Visit https://platform.openai.com/account/rate-limits to learn more.
+  - [events] y a-t-il des événements à venir?
+    Error: No information found or response too short
+  - [events] what celebrations are there?
+    Error: Failed to generate response: 429 Rate limit reached for gpt-4.1-nano-long-context in organization org-OxyUjOf9IqbLWhWXWGRwoTCI on tokens per min (TPM): Limit 400000, Used 208757, Requested 202221. Please try again in 1.646s. Visit https://platform.openai.com/account/rate-limits to learn more.
+  - [events] tell me about school events
+    Error: No information found or response too short
+  - [admissions] how do I enroll?
+    Error: No information found or response too short
+  - [admissions] what is the enrollment process?
+    Error: No information found or response too short
+  - [admissions] comment faire une demande d'admission?
+    Error: No information found or response too short
+  - [admissions] when can I register?
+    Error: No information found or response too short
+  - [admissions] quand puis-je m'inscrire?
+    Error: No information found or response too short
+  - [recipes] what recipes are available?
+    Error: No information found or response too short
+  - [recipes] quelles recettes sont disponibles?
+    Error: No information found or response too short
+  - [recipes] what's for lunch?
+    Error: No information found or response too short
+  - [recipes] qu'est-ce qu'il y a pour le déjeuner?
+    Error: Failed to generate response: 429 Rate limit reached for gpt-4.1-nano in organization org-OxyUjOf9IqbLWhWXWGRwoTCI on tokens per min (TPM): Limit 200000, Used 200000, Requested 6914. Please try again in 2.074s. Visit https://platform.openai.com/account/rate-limits to learn more.
+  - [recipes] show me the menu
+    Error: No information found or response too short
+  - [recipes] montrez-moi le menu
+    Error: No information found or response too short
+  - [sports] what sports teams are there?
+    Error: No information found or response too short
+  - [sports] quelles équipes sportives y a-t-il?
+    Error: Failed to generate response: 429 Rate limit reached for gpt-4.1-nano in organization org-OxyUjOf9IqbLWhWXWGRwoTCI on tokens per min (TPM): Limit 200000, Used 200000, Requested 7067. Please try again in 2.12s. Visit https://platform.openai.com/account/rate-limits to learn more.
+  - [sports] what athletics programs are available?
+    Error: No information found or response too short
+  - [sports] quels programmes d'athlétisme sont disponibles?
+    Error: No information found or response too short
+  - [sports] tell me about the sports program
+    Error: No information found or response too short
+  - [mixed] tell me about the school
+    Error: No information found or response too short
+  - [mixed] que devrais-je savoir sur cette école?
+    Error: No information found or response too short
+  - [mixed] give me general information
+    Error: No information found or response too short
+  - [mixed] what is this school about?
+    Error: No information found or response too short
+  - [mixed] de quoi parle cette école?
+    Error: No information found or response too short
+  - [mixed] describe the school
+    Error: No information found or response too short
+  - [mixed] décrivez l'école
+    Error: No information found or response too short
+  - [mixed] what makes this school special?
+    Error: No information found or response too short
+  - [mixed] qu'est-ce qui rend cette école spéciale?
+    Error: No information found or response too short
+
+================================================================================
+CATEGORY BREAKDOWN
+================================================================================
+info-parents: 22/24 (91.7%)
+staff: 9/18 (50.0%)
+calendar: 8/20 (40.0%)
+general: 2/18 (11.1%)
+academics: 0/14 (0.0%)
+students: 3/12 (25.0%)
+events: 2/11 (18.2%)
+admissions: 4/11 (36.4%)
+recipes: 2/12 (16.7%)
+sports: 0/5 (0.0%)
+mixed: 3/12 (25.0%)
+
+================================================================================
+PROVIDER BREAKDOWN
+================================================================================
+openai (gpt-4.1-nano): 55/157 (35.0%) | Avg Time: 10118ms
+
+================================================================================
+FAILED QUESTIONS SUMMARY
+================================================================================
+
+1. [EN] [staff] who is the director?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 2184ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+2. [EN] [staff] what is the name of the school director?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 20493ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+3. [EN] [staff] tell me about the principal
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 21365ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+4. [EN] [staff] who runs the school?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 26514ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+5. [EN] [staff] who are the teachers?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 5563ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+6. [EN] [staff] list the staff members
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 15310ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+7. [EN] [calendar] when does school start?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 19504ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+8. [EN] [calendar] when does school end?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 1285ms
+   Error: No information found or response too short
+   Response Preview: The school year likely ends around the time of the end of the calendar year, but the specific date is not provided in the context. For exact dates, pl...
+
+9. [EN] [calendar] when does the school year begin?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 19153ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+10. [EN] [calendar] quand commence l'école?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 2189ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+11. [EN] [calendar] when was the school opened?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 20623ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+12. [EN] [calendar] quand le collège a-t-il ouvert ses portes?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 1232ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+13. [EN] [calendar] what are the school holidays?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 37365ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+14. [EN] [calendar] quelles sont les vacances scolaires?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 2538ms
+   Error: Failed to generate response: 429 Rate limit reached for gpt-4.1-nano in organization org-OxyUjOf9IqbLWhWXWGRwoTCI on tokens per min (TPM): Limit 200000, Used 200000, Requested 1507. Please try again in 452ms. Visit https://platform.openai.com/account/rate-limits to learn more.
+   Response Preview: 
+
+15. [EN] [calendar] when is the next holiday?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 32730ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+16. [EN] [calendar] quand sont les prochaines vacances?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 1904ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+17. [EN] [calendar] what time does school start?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 16756ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+18. [EN] [general] is there a code of conduct?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 20424ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+19. [EN] [general] est-ce qu'il y a un code de vie?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 22187ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+20. [EN] [general] what is the code of conduct?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 20304ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+21. [EN] [general] what are the school rules?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 21145ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+22. [EN] [general] quels sont les règlements de l'école?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 3537ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+23. [EN] [general] tell me about the school policies
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 19729ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+24. [EN] [general] what is the school's mission?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 8285ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+25. [EN] [general] what is the school address?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 6486ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+26. [EN] [general] where is the school located?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 33943ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+27. [EN] [general] how do I contact the school?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 68580ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+28. [EN] [general] comment contacter l'école?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 3238ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+29. [EN] [academics] what courses are offered?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 48974ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+30. [EN] [academics] quels cours sont offerts?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 1898ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+31. [EN] [academics] what is the curriculum?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 2466ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+32. [EN] [academics] what subjects are taught?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 82844ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+33. [EN] [academics] quelles matières sont enseignées?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 2850ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+34. [EN] [academics] how are grades calculated?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 62453ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+35. [EN] [academics] comment les notes sont-elles calculées?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 2937ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+36. [EN] [academics] what is the grading system?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 69780ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+37. [EN] [academics] tell me about the academic program
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 3266ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+38. [EN] [students] what activities are available for students?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 64861ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+39. [EN] [students] are there any clubs?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 5519ms
+   Error: Failed to generate response: 429 Request too large for gpt-4.1-nano-long-context in organization org-OxyUjOf9IqbLWhWXWGRwoTCI on tokens per min (TPM): Limit 400000, Requested 422472. The input or output tokens must be reduced in order to run successfully. Visit https://platform.openai.com/account/rate-limits to learn more.
+   Response Preview: 
+
+40. [EN] [students] y a-t-il des clubs?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 4533ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+41. [EN] [students] quels sports sont disponibles?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 2160ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+42. [EN] [students] tell me about student life
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 1235ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+43. [EN] [students] parlez-moi de la vie étudiante
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 1091ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+44. [EN] [events] what events are happening?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 57204ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+45. [EN] [events] quels événements ont lieu?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 2811ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous préciser de quels événements vous parlez ou contacter di...
+
+46. [EN] [events] are there any upcoming events?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 5889ms
+   Error: Failed to generate response: 429 Request too large for gpt-4.1-nano-long-context in organization org-OxyUjOf9IqbLWhWXWGRwoTCI on tokens per min (TPM): Limit 400000, Requested 422475. The input or output tokens must be reduced in order to run successfully. Visit https://platform.openai.com/account/rate-limits to learn more.
+   Response Preview: 
+
+47. [EN] [events] y a-t-il des événements à venir?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 1842ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+48. [EN] [events] what celebrations are there?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 44606ms
+   Error: Failed to generate response: 429 Rate limit reached for gpt-4.1-nano-long-context in organization org-OxyUjOf9IqbLWhWXWGRwoTCI on tokens per min (TPM): Limit 400000, Used 208757, Requested 202221. Please try again in 1.646s. Visit https://platform.openai.com/account/rate-limits to learn more.
+   Response Preview: 
+
+49. [EN] [events] tell me about school events
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 5654ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+50. [EN] [admissions] how do I enroll?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 10518ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+51. [EN] [admissions] what is the enrollment process?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 13816ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+52. [EN] [admissions] comment faire une demande d'admission?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 18207ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+53. [EN] [admissions] when can I register?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 3537ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+54. [EN] [admissions] quand puis-je m'inscrire?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 1246ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+55. [EN] [recipes] what recipes are available?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 11656ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+56. [EN] [recipes] quelles recettes sont disponibles?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 2306ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+57. [EN] [recipes] what's for lunch?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 10286ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+58. [EN] [recipes] qu'est-ce qu'il y a pour le déjeuner?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 5962ms
+   Error: Failed to generate response: 429 Rate limit reached for gpt-4.1-nano in organization org-OxyUjOf9IqbLWhWXWGRwoTCI on tokens per min (TPM): Limit 200000, Used 200000, Requested 6914. Please try again in 2.074s. Visit https://platform.openai.com/account/rate-limits to learn more.
+   Response Preview: 
+
+59. [EN] [recipes] show me the menu
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 26518ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+60. [EN] [recipes] montrez-moi le menu
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 33065ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+61. [EN] [sports] what sports teams are there?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 6521ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+62. [EN] [sports] quelles équipes sportives y a-t-il?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 6094ms
+   Error: Failed to generate response: 429 Rate limit reached for gpt-4.1-nano in organization org-OxyUjOf9IqbLWhWXWGRwoTCI on tokens per min (TPM): Limit 200000, Used 200000, Requested 7067. Please try again in 2.12s. Visit https://platform.openai.com/account/rate-limits to learn more.
+   Response Preview: 
+
+63. [EN] [sports] what athletics programs are available?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 26756ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+64. [EN] [sports] quels programmes d'athlétisme sont disponibles?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 1337ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+65. [EN] [sports] tell me about the sports program
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 2389ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+66. [EN] [mixed] tell me about the school
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 2747ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+67. [EN] [mixed] que devrais-je savoir sur cette école?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 2356ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+68. [EN] [mixed] give me general information
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 2074ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous préciser le type d'informations que vous souhaitez conna...
+
+69. [EN] [mixed] what is this school about?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 49829ms
+   Error: No information found or response too short
+   Response Preview: Collège Saint-Louis is a French secondary school located in Quebec, Canada. The school offers education for students in secondary levels and is dedica...
+
+70. [EN] [mixed] de quoi parle cette école?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 2762ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+71. [EN] [mixed] describe the school
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 2453ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+72. [EN] [mixed] décrivez l'école
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 1801ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+73. [EN] [mixed] what makes this school special?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 6414ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+74. [EN] [mixed] qu'est-ce qui rend cette école spéciale?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 3543ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+75. [FR] [info-parents] info-parents septembre 2024
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 1225ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+76. [FR] [info-parents] premier info-parents de l'année
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 1403ms
+   Error: No information found or response too short
+   Response Preview: I cannot answer this question with the information I have. Could you rephrase your question or contact the school directly?
+
+77. [FR] [staff] qui dirige l'école?
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 2391ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+78. [FR] [staff] administration de l'école
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 943ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+79. [FR] [staff] équipe administrative
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 1787ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+80. [FR] [calendar] jours de classe
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 1719ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+81. [FR] [general] règlement intérieur
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 745ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+82. [FR] [general] politique de l'école
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 735ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+83. [FR] [general] adresse de l'école
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 17893ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+84. [FR] [general] téléphone de l'école
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 10702ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+85. [FR] [general] email de l'école
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 33249ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+86. [FR] [academics] programme académique
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 3470ms
+   Error: Failed to generate response: 429 Rate limit reached for gpt-4.1-nano in organization org-OxyUjOf9IqbLWhWXWGRwoTCI on tokens per min (TPM): Limit 200000, Used 200000, Requested 3155. Please try again in 946ms. Visit https://platform.openai.com/account/rate-limits to learn more.
+   Response Preview: 
+
+87. [FR] [academics] système de notation
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 4524ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+88. [FR] [academics] évaluation des élèves
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 1850ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+89. [FR] [academics] matières enseignées
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 1740ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+90. [FR] [academics] cours disponibles
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 895ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+91. [FR] [students] clubs étudiants
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 1713ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+92. [FR] [students] vie scolaire
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 27897ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+93. [FR] [students] activités pour étudiants
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 2544ms
+   Error: Failed to generate response: 429 Rate limit reached for gpt-4.1-nano in organization org-OxyUjOf9IqbLWhWXWGRwoTCI on tokens per min (TPM): Limit 200000, Used 200000, Requested 2548. Please try again in 764ms. Visit https://platform.openai.com/account/rate-limits to learn more.
+   Response Preview: 
+
+94. [FR] [events] événements à venir
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 4971ms
+   Error: Failed to generate response: 429 Rate limit reached for gpt-4.1-nano in organization org-OxyUjOf9IqbLWhWXWGRwoTCI on tokens per min (TPM): Limit 200000, Used 200000, Requested 5541. Please try again in 1.662s. Visit https://platform.openai.com/account/rate-limits to learn more.
+   Response Preview: 
+
+95. [FR] [events] célébrations
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 2582ms
+   Error: Failed to generate response: 429 Rate limit reached for gpt-4.1-nano in organization org-OxyUjOf9IqbLWhWXWGRwoTCI on tokens per min (TPM): Limit 200000, Used 200000, Requested 1810. Please try again in 543ms. Visit https://platform.openai.com/account/rate-limits to learn more.
+   Response Preview: 
+
+96. [FR] [events] spectacles
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 2381ms
+   Error: Failed to generate response: 429 Rate limit reached for gpt-4.1-nano in organization org-OxyUjOf9IqbLWhWXWGRwoTCI on tokens per min (TPM): Limit 200000, Used 200000, Requested 1544. Please try again in 463ms. Visit https://platform.openai.com/account/rate-limits to learn more.
+   Response Preview: 
+
+97. [FR] [admissions] documents requis
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 12163ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+98. [FR] [admissions] frais de scolarité
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 4106ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+99. [FR] [recipes] recettes disponibles
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 4605ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+100. [FR] [recipes] menu de la cafétéria
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 21094ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+
+101. [FR] [recipes] repas scolaires
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 4364ms
+   Error: Failed to generate response: 429 Rate limit reached for gpt-4.1-nano in organization org-OxyUjOf9IqbLWhWXWGRwoTCI on tokens per min (TPM): Limit 200000, Used 200000, Requested 4071. Please try again in 1.221s. Visit https://platform.openai.com/account/rate-limits to learn more.
+   Response Preview: 
+
+102. [FR] [recipes] options végétariennes
+   Provider: openai (gpt-4.1-nano), Background: gemini (gemini-2.5-flash-lite)
+   Time: 2965ms
+   Error: No information found or response too short
+   Response Preview: Je ne peux pas répondre à cette question avec les informations dont je dispose. Pourriez-vous reformuler votre question ou contacter directement l'éco...
+

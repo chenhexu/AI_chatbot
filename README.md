@@ -143,6 +143,51 @@ Open [http://localhost:3000](http://localhost:3000) in your browser to see the c
 
 7. **PDF Links**: When relevant PDFs are found, the chatbot provides clickable download links
 
+## Development Tools
+
+### CLI Chat Tool
+
+Test queries locally without deploying or using the UI. Connects directly to your database.
+
+**Usage:**
+
+```bash
+# Interactive mode (keeps asking for queries)
+npm run cli-chat
+
+# Single query mode
+npm run cli-chat "summarize info-parents of January 2024"
+
+# With options
+npm run cli-chat "your query" --provider gemini --background-ai glm
+```
+
+**Interactive Commands:**
+- `exit`, `quit`, `q` - Exit the CLI
+- `help`, `h` - Show help
+- `clear` - Clear the screen
+
+**Options:**
+- `--provider <openai|gemini>` - Choose AI provider for response generation
+- `--background-ai <gemini|glm>` - Choose AI for classification/expansion
+
+**Example:**
+```bash
+npm run cli-chat "give me the link to the info-parents of January 2024"
+```
+
+This tool shows all the detailed logging we added, making it perfect for debugging query issues.
+
+### Database Check Scripts
+
+```bash
+# Check info-parents documents and classifications
+npm run check-info-parents
+
+# Estimate database size
+npm run estimate-db-size
+```
+
 ## API Endpoints
 
 ### POST `/api/chat`

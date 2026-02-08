@@ -118,14 +118,20 @@ export async function generateChatResponse(
   userMessage: string,
   documentChunks: TextChunk[],
   requestId?: string,
-  provider: 'openai' | 'gemini' = 'openai',
-  expandedQuery?: string
+  provider: 'openai' | 'gemini' | 'glm' = 'openai',
+  expandedQuery?: string,
+  querySubjects?: string[]
 ): Promise<string> {
   const logPrefix = requestId ? `[${requestId}]` : '';
   
   // Use Gemini if specified
   if (provider === 'gemini') {
-    return generateGeminiChatResponse(userMessage, documentChunks, requestId, expandedQuery);
+    return generateGeminiChatResponse(userMessage, documentChunks, requestId, expandedQuery, querySubjects);
+  }
+  
+  // Use GLM-4.7 if specified (OpenAI-compatible API)
+  if (provider === 'glm') {
+    return generateGLMChatResponse(userMessage, documentChunks, requestId, expandedQuery, querySubjects);
   }
   
   const client = getOpenAIClient();
@@ -135,8 +141,17 @@ export async function generateChatResponse(
   // Find relevant chunks using expanded query if provided
   const searchQuery = expandedQuery || userMessage;
   console.log(`${logPrefix} 🔎 Finding relevant chunks...`);
-  const uniqueChunks = findRelevantChunks(documentChunks, searchQuery, 5);
-  const context = buildContextString(uniqueChunks);
+  const uniqueChunks = findRelevantChunks(documentChunks, searchQuery, 5, querySubjects);
+  
+  // Extract PDF links from relevant chunks (do this before logging)
+  const pdfLinks = new Set<string>();
+  uniqueChunks.forEach(chunk => {
+    if (chunk.pdfUrl) {
+      pdfLinks.add(chunk.pdfUrl);
+    }
+  });
+  
+  const context = buildContextString(uniqueChunks, searchQuery);
   console.log(`${logPrefix} ✅ Found ${uniqueChunks.length} chunks`);
   
   // Limit context size to avoid token limit errors
@@ -166,17 +181,25 @@ export async function generateChatResponse(
       const preview = chunk.text.substring(0, 200).replace(/\n/g, ' ');
       console.log(`${logPrefix}   Chunk ${i + 1} preview: ${preview}...`);
     });
+    
+    // Log PDF links found
+    if (pdfLinks.size > 0) {
+      console.log(`${logPrefix} 📄 PDF links found in context: ${Array.from(pdfLinks).slice(0, 3).join(', ')}`);
+    } else {
+      console.log(`${logPrefix} ⚠️ No PDF links found in selected chunks`);
+    }
   } else {
     console.warn(`${logPrefix} ⚠️  No relevant chunks found! This might cause the AI to say it doesn't have information.`);
   }
   
-  // Extract PDF links from relevant chunks
-  const pdfLinks = new Set<string>();
-  uniqueChunks.forEach(chunk => {
-    if (chunk.pdfUrl) {
-      pdfLinks.add(chunk.pdfUrl);
-    }
-  });
+  // Log context size and preview
+  console.log(`${logPrefix} 📊 Context size: ${truncatedContext.length} characters (${Math.round(truncatedContext.length / 4)} estimated tokens)`);
+  if (truncatedContext.length < 100) {
+    console.warn(`${logPrefix} ⚠️ WARNING: Context is very short (${truncatedContext.length} chars), AI may not have enough information!`);
+  }
+  if (truncatedContext.length > MAX_CONTEXT_LENGTH * 0.9) {
+    console.log(`${logPrefix} ⚠️ Context was truncated (exceeded ${MAX_CONTEXT_LENGTH} chars)`);
+  }
   
   // Detect language from user message (using shared utility)
   const detectedLanguage = detectLanguage(userMessage);
@@ -201,6 +224,14 @@ IMPORTANT RULES:
 - For questions about recipes/ingredients, extract the complete ingredient list and preparation steps from the context
 - For questions about the school, use any relevant information from the context
 - When answering recipe questions, provide complete and accurate information including all ingredients with measurements
+
+SPECIAL INSTRUCTIONS FOR INFO-PARENTS QUERIES:
+- "Info-parents" (or "info parents", "infos-parents") are parent communication documents/newsletters
+- When users ask about "info-parents" documents, look for content containing "info-parents", "info parents", or "infos-parents" in the context
+- These documents typically contain announcements, important dates, school news, and information for parents
+- If a user asks for a specific month/year (e.g., "info-parents of January 2024"), look for documents that mention both the month and year
+- When summarizing info-parents documents, provide key information, important dates, and announcements
+- Always include PDF download links when available in the context (format: /api/pdf/[filename])
 - **IMPORTANT**: When users ask for PDF links or download links, you MUST provide the PDF download links in a clear, natural format. ${isEnglish 
     ? 'For each PDF, format your response like: "You can download the PDF document by following this link: /api/pdf/[filename]".' 
     : 'Pour chaque PDF, formatez votre réponse comme suit: "Vous pouvez télécharger le document PDF en suivant ce lien: /api/pdf/[nom du fichier PDF]".'} 
@@ -261,13 +292,137 @@ ${truncatedContext || (isEnglish ? 'No specific context available. Please inform
 }
 
 /**
+ * Generate chat response using GLM-4.7 with RAG context (OpenAI-compatible API)
+ */
+async function generateGLMChatResponse(
+  userMessage: string,
+  documentChunks: TextChunk[],
+  requestId?: string,
+  expandedQuery?: string,
+  querySubjects?: string[]
+): Promise<string> {
+  const logPrefix = requestId ? `[${requestId}]` : '';
+  
+  const client = getGLMClient();
+  const model = getGLMModel();
+  
+  // Find relevant chunks using expanded query if provided
+  const searchQuery = expandedQuery || userMessage;
+  console.log(`${logPrefix} 🔎 Finding relevant chunks...`);
+  const uniqueChunks = findRelevantChunks(documentChunks, searchQuery, 6, querySubjects);
+  
+  // Extract PDF links from relevant chunks (do this before logging)
+  const pdfLinks = new Set<string>();
+  uniqueChunks.forEach(chunk => {
+    if (chunk.pdfUrl) {
+      pdfLinks.add(chunk.pdfUrl);
+    }
+  });
+  
+  const context = buildContextString(uniqueChunks, searchQuery);
+  console.log(`${logPrefix} ✅ Found ${uniqueChunks.length} chunks`);
+  
+  // Limit context size
+  const MAX_CONTEXT_LENGTH = 1000000;
+  const truncatedContext = context.length > MAX_CONTEXT_LENGTH 
+    ? context.substring(0, MAX_CONTEXT_LENGTH) + '\n\n[Context truncated due to size limit...]'
+    : context;
+  
+  // Detect language
+  const detectedLanguage = detectLanguage(userMessage);
+  const isEnglish = detectedLanguage === 'en';
+  const langMessages = getLanguageMessages(detectedLanguage);
+  const errorMessage = langMessages.noInfo;
+  const defaultErrorMessage = langMessages.defaultError;
+  const languageInstruction = langMessages.languageInstruction;
+  
+  const systemPrompt = `You are a helpful AI assistant for Collège Saint-Louis, a French secondary school in Quebec, Canada. 
+Your role is to answer questions about the school based on the information provided to you.
+
+IMPORTANT RULES:
+- Answer questions based on the context information provided below
+- If the information is clearly not in the provided context, say: "${errorMessage}"
+- ${languageInstruction}
+- Be helpful, friendly, and professional
+- Try to infer reasonable answers from the context even if not explicitly stated
+- For questions about staff/personnel/director/principal, look for names, roles, and titles in the context
+- For questions about recipes/ingredients, extract the complete ingredient list and preparation steps from the context
+- For questions about the school, use any relevant information from the context
+- When answering recipe questions, provide complete and accurate information including all ingredients with measurements
+
+SPECIAL INSTRUCTIONS FOR INFO-PARENTS QUERIES:
+- "Info-parents" (or "info parents", "infos-parents") are parent communication documents/newsletters
+- When users ask about "info-parents" documents, look for content containing "info-parents", "info parents", or "infos-parents" in the context
+- These documents typically contain announcements, important dates, school news, and information for parents
+- If a user asks for a specific month/year (e.g., "info-parents of January 2024"), look for documents that mention both the month and year
+- When summarizing info-parents documents, provide key information, important dates, and announcements
+- Always include PDF download links when available in the context (format: /api/pdf/[filename])
+- **IMPORTANT**: When users ask for PDF links or download links, you MUST provide the PDF download links in a clear, natural format. ${isEnglish 
+    ? 'For each PDF, format your response like: "You can download the PDF document by following this link: /api/pdf/[filename]".' 
+    : 'Pour chaque PDF, formatez votre réponse comme suit: "Vous pouvez télécharger le document PDF en suivant ce lien: /api/pdf/[nom du fichier PDF]".'} 
+  CRITICAL LINK FORMATTING RULES:
+  - Use the EXACT filename from the "[PDF Documents disponibles:]" section (copy it exactly, including the .pdf extension)
+  - Format links as: /api/pdf/[exact-filename-from-list]
+  - Do NOT add brackets, quotes, or any extra formatting around the filename
+  - Do NOT modify the filename (keep spaces, hyphens, and special characters as shown)
+  - If multiple PDFs are available, list them clearly with separate links for each
+  - Example: If the list shows "info-parents-janvier-2024.pdf", use exactly: /api/pdf/info-parents-janvier-2024.pdf
+
+Context information about Collège Saint-Louis:
+${truncatedContext || (isEnglish ? 'No specific context available. Please inform the user that you need more information.' : 'Aucun contexte spécifique disponible. Veuillez informer l\'utilisateur que vous avez besoin de plus d\'informations.')}`;
+
+  const userPrompt = userMessage;
+
+  try {
+    console.log(`${logPrefix} 🤖 [AI CALL] GLM-4.7 (${model}) - Chat Response Generation`);
+    console.log(`${logPrefix}    User message: "${userMessage.substring(0, 150)}${userMessage.length > 150 ? '...' : ''}"`);
+    console.log(`${logPrefix}    Context chunks: ${uniqueChunks.length}, Context length: ${truncatedContext.length} chars`);
+    
+    const timeoutMs = 25000;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    
+    try {
+      const response = await client.chat.completions.create({
+        model: model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature: 0.7,
+        max_tokens: 400,
+      });
+      
+      clearTimeout(timeoutId);
+      const answer = response.choices[0]?.message?.content || defaultErrorMessage;
+      console.log(`${logPrefix}    Response: "${answer.substring(0, 150)}${answer.length > 150 ? '...' : ''}" (${answer.length} chars)`);
+      console.log(`${logPrefix} ✅ Response received (${answer.length} chars)`);
+      return answer;
+    } catch (apiError: unknown) {
+      clearTimeout(timeoutId);
+      if (apiError instanceof Error && apiError.name === 'AbortError') {
+        console.error(`${logPrefix} ⏱️ GLM request timed out after ${timeoutMs}ms`);
+        return langMessages.timeout;
+      }
+      throw apiError;
+    }
+  } catch (error) {
+    console.error('GLM API error:', error);
+    throw new Error(
+      `Failed to generate response: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
+  }
+}
+
+/**
  * Generate chat response using Google Gemini with RAG context
  */
 async function generateGeminiChatResponse(
   userMessage: string,
   documentChunks: TextChunk[],
   requestId?: string,
-  expandedQuery?: string
+  expandedQuery?: string,
+  querySubjects?: string[]
 ): Promise<string> {
   const logPrefix = requestId ? `[${requestId}]` : '';
   const client = getGeminiClient();
@@ -275,8 +430,8 @@ async function generateGeminiChatResponse(
   
   // Find relevant chunks using expanded query if provided
   const searchQuery = expandedQuery || userMessage;
-  const relevantChunks = findRelevantChunks(documentChunks, searchQuery, 6);
-  const context = buildContextString(relevantChunks);
+  const relevantChunks = findRelevantChunks(documentChunks, searchQuery, 6, querySubjects);
+  const context = buildContextString(relevantChunks, userMessage);
   
   // Limit context size
   const MAX_CONTEXT_LENGTH = 500000;

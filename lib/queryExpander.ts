@@ -215,8 +215,54 @@ French translation:`;
 }
 
 /**
+ * Generate multiple query variations for better retrieval
+ * Returns array of query variations (original + rephrased versions)
+ */
+export async function generateQueryVariations(query: string, backgroundAI: 'gemini' | 'glm' = 'glm'): Promise<string[]> {
+  const variations: string[] = [query]; // Always include original
+  
+  try {
+    const prompt = `Generate 2 alternative phrasings of this question that might appear in documents. Return ONLY the 2 phrasings, one per line, nothing else.
+
+Original: "${query}"
+
+Alternative phrasings:`;
+
+    if (backgroundAI === 'glm') {
+      const client = getGLMClient();
+      const modelName = getGLMModel();
+      const response = await client.chat.completions.create({
+        model: modelName,
+        messages: [
+          { role: 'system', content: 'You are a query rephrasing assistant. Return only 2 alternative phrasings, one per line.' },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.4,
+        max_tokens: 100,
+      });
+      
+      const text = response.choices[0]?.message?.content?.trim() || '';
+      const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0 && l !== query);
+      variations.push(...lines.slice(0, 2));
+    } else {
+      const client = getGeminiClient();
+      const model = client.getGenerativeModel({ model: getGeminiModel() });
+      const result = await model.generateContent(prompt);
+      const text = result.response.text().trim();
+      const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0 && l !== query);
+      variations.push(...lines.slice(0, 2));
+    }
+  } catch (error) {
+    console.warn('Query variation generation failed, using original only:', error);
+  }
+  
+  return variations.filter((v, i, arr) => arr.indexOf(v) === i); // Deduplicate
+}
+
+/**
  * Expand and translate query for better RAG retrieval
- * Returns the expanded query (original + synonyms + translated if needed)
+ * ENHANCED: Now generates multiple query variations for better retrieval
+ * Returns the expanded query (original + synonyms + translated if needed + variations)
  * @param backgroundAI - AI model to use for background processing ('gemini' or 'glm')
  */
 export async function expandAndTranslateQuery(query: string, backgroundAI: 'gemini' | 'glm' = 'gemini'): Promise<string> {
@@ -224,17 +270,21 @@ export async function expandAndTranslateQuery(query: string, backgroundAI: 'gemi
     // First translate if needed
     const translated = await translateQueryToFrench(query, backgroundAI);
     
+    // Generate query variations
+    const variations = await generateQueryVariations(query, backgroundAI);
+    
     // If translation is different, use both original and translated, then expand
     if (translated !== query && translated.length > 0) {
       // Expand the translated version (which already includes translated + terms)
       const expandedTranslated = await expandQuery(translated, backgroundAI);
-      // Combine original with expanded translated query
-      // expandedTranslated is already "translated + expansion terms"
-      // So we just prepend the original query
-      return `${query} ${expandedTranslated}`.trim();
+      // Combine original with expanded translated query and variations
+      const allTerms = [query, expandedTranslated, ...variations].filter((v, i, arr) => arr.indexOf(v) === i);
+      return allTerms.join(' ').trim();
     } else {
-      // Just expand the original query
-      return await expandQuery(query, backgroundAI);
+      // Just expand the original query and add variations
+      const expanded = await expandQuery(query, backgroundAI);
+      const allTerms = [expanded, ...variations].filter((v, i, arr) => arr.indexOf(v) === i);
+      return allTerms.join(' ').trim();
     }
   } catch (error) {
     console.error('Query expansion/translation error:', error);

@@ -230,9 +230,15 @@ function classifyQueryByKeywords(query: string): Subject[] {
     categories.push('admissions');
   }
   
-  // Parents - explicitly check for info-parents first
-  if (/\b(info[- ]?parents?|infos[- ]?parents?)\b/i.test(queryLower)) {
+  // Parents - explicitly check for info-parents first (with various formats)
+  // Test patterns: "info-parents", "info parents", "infos-parents", "infos parents", "info-parent", "infos-parent"
+  const infoParentsPattern = /\b(info[- ]?parents?|infos[- ]?parents?)\b/i;
+  if (infoParentsPattern.test(queryLower)) {
     categories.push('parents');
+    // Log for debugging
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`   🔍 Keyword match: "info-parents" pattern detected in query`);
+    }
   }
   // Other parent-related keywords
   if (/\b(parent|parental|newsletter|bulletin)\b/i.test(queryLower)) {

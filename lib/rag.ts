@@ -6,6 +6,7 @@ export interface TextChunk {
   source: string;
   index: number;
   pdfUrl?: string; // Original PDF URL/path for PDF text files
+  subject?: string; // Subject classification (e.g., 'staff', 'academics', 'general')
 }
 
 /**
@@ -754,10 +755,32 @@ function calculateSimilarityInternal(query: string, text: string): number {
   }
   
   // Normal scoring for non-"projet personnel" queries
-  const exactPhraseScore = exactPhraseMatch ? 0.3 : 0;
-  const keyPhraseScore = keyPhraseMatches > 0 ? Math.min(keyPhraseMatches * 0.2, 0.25) : 0;
+  // ENHANCED: Increased exact phrase match boost from 0.3 to 0.6 for better precision
+  const exactPhraseScore = exactPhraseMatch ? 0.6 : 0;
+  const keyPhraseScore = keyPhraseMatches > 0 ? Math.min(keyPhraseMatches * 0.25, 0.3) : 0;
+  
+  // ENHANCED: Add query term position weighting (first words = more important)
+  // Words at the start of the query are more important than words at the end
+  let weightedExactMatches = 0;
+  let weightedPartialMatches = 0;
+  const queryWordCount = queryWords.length;
+  
+  for (let i = 0; i < queryWords.length; i++) {
+    const word = queryWords[i];
+    const positionWeight = 1.0 + (0.5 * (1 - i / Math.max(queryWordCount, 1))); // First word gets 1.5x, last word gets 1.0x
+    
+    // Check if this word matched exactly
+    const wordBoundaryRegex = getWordBoundaryRegex(word);
+    if (wordBoundaryRegex.test(textLower)) {
+      weightedExactMatches += positionWeight;
+    } else if (textLower.includes(word)) {
+      weightedPartialMatches += positionWeight * 0.3;
+    }
+  }
+  
+  // ENHANCED: Improved word scoring with position weighting
   const wordScore = queryWords.length > 0 
-    ? ((exactMatches * 0.8 + partialMatches * 0.2) / Math.max(queryWords.length, 1)) * 0.15
+    ? ((weightedExactMatches * 0.8 + weightedPartialMatches * 0.2) / Math.max(queryWords.length, 1)) * 0.2
     : 0;
   const relatedScore = Math.min(relatedMatches * 0.05, 0.05);
   
@@ -810,12 +833,17 @@ function findMatchPosition(query: string, text: string): 'start' | 'end' | 'both
 /**
  * Find most relevant chunks for a query
  * Includes neighboring chunks when matches are at boundaries to preserve context
+ * @param chunks - Array of text chunks to search
+ * @param query - Search query
+ * @param maxChunks - Maximum number of chunks to return
+ * @param querySubjects - Optional array of subject classifications for the query (e.g., ['staff', 'general'])
  */
 export function findRelevantChunks(
   chunks: TextChunk[],
   query: string,
-  maxChunks: number = 5
-): TextChunk[] {
+  maxChunks: number = 5,
+  querySubjects?: string[]
+): ChunkWithScore[] {
   const similarityStartCpu = process.cpuUsage();
   const similarityStartTime = Date.now();
   
@@ -823,11 +851,24 @@ export function findRelevantChunks(
   const contentChunks = chunks.filter(chunk => !isNonContentChunk(chunk.source, chunk.text));
   
   // Calculate similarity scores only on content chunks
-  const scoredChunks = contentChunks.map((chunk, originalIndex) => ({
-    chunk,
-    originalIndex,
-    score: calculateSimilarity(query, chunk.text, chunk.source),
-  }));
+  const scoredChunks = contentChunks.map((chunk, originalIndex) => {
+    let score = calculateSimilarity(query, chunk.text, chunk.source);
+    
+    // ENHANCED: Classification-based boosting
+    // If chunk subject matches query classification, boost the score
+    if (querySubjects && querySubjects.length > 0 && chunk.subject) {
+      if (querySubjects.includes(chunk.subject)) {
+        score += 0.3; // Boost chunks that match the query classification
+        console.log(`   📈 Boosted chunk "${chunk.source.split('/').pop()}" (+0.3) for subject match: ${chunk.subject}`);
+      }
+    }
+    
+    return {
+      chunk,
+      originalIndex,
+      score,
+    };
+  });
   
   const similarityTime = Date.now() - similarityStartTime;
   const similarityCpu = process.cpuUsage();
@@ -836,30 +877,259 @@ export function findRelevantChunks(
   const totalDelta = userDelta + systemDelta;
   console.log(`   💻 RAG Similarity: ${chunks.length} chunks in ${similarityTime}ms | CPU: ${totalDelta.toFixed(2)}ms (user: ${userDelta.toFixed(2)}ms, system: ${systemDelta.toFixed(2)}ms)`);
   
+  // ENHANCED: Document-level scoring - boost chunks from documents with multiple matches
+  // If multiple chunks from the same document match, boost all of them
+  const documentScores = new Map<string, number>();
+  scoredChunks.forEach(item => {
+    const source = item.chunk.source;
+    const currentDocScore = documentScores.get(source) || 0;
+    // Count how many chunks from this document have score > 0.1
+    if (item.score > 0.1) {
+      documentScores.set(source, currentDocScore + 1);
+    }
+  });
+  
+  // Apply document-level boost (0.1 per additional matching chunk from same doc, max 0.3)
+  scoredChunks.forEach(item => {
+    const source = item.chunk.source;
+    const docMatchCount = documentScores.get(source) || 0;
+    if (docMatchCount > 1) {
+      const docBoost = Math.min((docMatchCount - 1) * 0.1, 0.3);
+      item.score += docBoost;
+    }
+  });
+  
   // Sort by score (descending)
   scoredChunks.sort((a, b) => b.score - a.score);
   
-  // Get top scoring chunks
-  const topChunks = scoredChunks
-    .slice(0, maxChunks)
-    .filter(item => item.score > 0);
+  // ENHANCED: Better chunk selection strategy
+  // 1. Top 3 highest scoring chunks
+  // 2. 2 chunks from different documents (diversity)
+  // 3. 1 chunk with high keyword density (even if lower score)
+  const selectedChunks: typeof scoredChunks = [];
+  const addedSources = new Set<string>();
+  const addedChunkKeys = new Set<string>();
+  
+  // First, add top 3 highest scoring chunks
+  for (let i = 0; i < Math.min(3, scoredChunks.length); i++) {
+    const item = scoredChunks[i];
+    if (item.score > 0) {
+      const chunkKey = `${item.chunk.source}:${item.chunk.index}`;
+      if (!addedChunkKeys.has(chunkKey)) {
+        selectedChunks.push(item);
+        addedChunkKeys.add(chunkKey);
+        addedSources.add(item.chunk.source);
+      }
+    }
+  }
+  
+  // Then, add 2 chunks from different documents (diversity)
+  let diversityCount = 0;
+  for (const item of scoredChunks) {
+    if (diversityCount >= 2) break;
+    if (item.score > 0 && !addedSources.has(item.chunk.source)) {
+      const chunkKey = `${item.chunk.source}:${item.chunk.index}`;
+      if (!addedChunkKeys.has(chunkKey)) {
+        selectedChunks.push(item);
+        addedChunkKeys.add(chunkKey);
+        addedSources.add(item.chunk.source);
+        diversityCount++;
+      }
+    }
+  }
+  
+  // Finally, add 1 chunk with high keyword density (even if lower score)
+  // Calculate keyword density for remaining chunks
+  const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+  for (const item of scoredChunks) {
+    if (selectedChunks.length >= maxChunks) break;
+    const chunkKey = `${item.chunk.source}:${item.chunk.index}`;
+    if (addedChunkKeys.has(chunkKey)) continue;
+    
+    const textLower = item.chunk.text.toLowerCase();
+    let keywordMatches = 0;
+    for (const word of queryWords) {
+      if (textLower.includes(word)) keywordMatches++;
+    }
+    const keywordDensity = keywordMatches / Math.max(queryWords.length, 1);
+    
+    // If keyword density is high (>0.5) and score is reasonable (>0.05), include it
+    if (keywordDensity > 0.5 && item.score > 0.05) {
+      selectedChunks.push(item);
+      addedChunkKeys.add(chunkKey);
+      break; // Only add one high-density chunk
+    }
+  }
+  
+  // Fill remaining slots with highest scoring chunks
+  for (const item of scoredChunks) {
+    if (selectedChunks.length >= maxChunks) break;
+    const chunkKey = `${item.chunk.source}:${item.chunk.index}`;
+    if (!addedChunkKeys.has(chunkKey) && item.score > 0) {
+      selectedChunks.push(item);
+      addedChunkKeys.add(chunkKey);
+    }
+  }
+  
+  // Sort selected chunks by score
+  selectedChunks.sort((a, b) => b.score - a.score);
+  
+  // Get top scoring chunks (use selected chunks instead of simple slice)
+  const topChunks = selectedChunks.filter(item => item.score > 0);
   
   // Debug logging for info-parents queries
   if (query.toLowerCase().includes('info-parents') || query.toLowerCase().includes('info parents')) {
-    const topScores = scoredChunks.slice(0, 5).map(item => ({
+    const topScores = scoredChunks.slice(0, 10).map(item => ({
       source: item.chunk.source.split('/').pop() || item.chunk.source,
       score: item.score.toFixed(3),
-      hasInfoParents: item.chunk.text.toLowerCase().includes('info-parents') || item.chunk.source.toLowerCase().includes('info-parents')
+      hasInfoParents: item.chunk.text.toLowerCase().includes('info-parents') || item.chunk.source.toLowerCase().includes('info-parents'),
+      preview: item.chunk.text.substring(0, 100).replace(/\n/g, ' ')
     }));
-    console.log(`   🔍 Top 5 scores for "info-parents" query:`, topScores);
+    console.log(`   🔍 Top 10 scores for "info-parents" query:`, topScores);
+    
+    // Check if any chunks contain "info-parents" pattern
+    const infoParentsChunks = scoredChunks.filter(item => 
+      item.chunk.text.toLowerCase().includes('info-parents') || 
+      item.chunk.source.toLowerCase().includes('info-parents')
+    );
+    if (infoParentsChunks.length === 0) {
+      console.log(`   ⚠️ WARNING: No chunks found containing "info-parents" pattern in text or source!`);
+    } else {
+      console.log(`   ✅ Found ${infoParentsChunks.length} chunks containing "info-parents" pattern`);
+      const topInfoParents = infoParentsChunks.slice(0, 3).map(item => ({
+        source: item.chunk.source.split('/').pop() || item.chunk.source,
+        score: item.score.toFixed(3)
+      }));
+      console.log(`   📊 Top info-parents chunks:`, topInfoParents);
+    }
+  }
+  
+  // Special handling for info-parents queries
+  const isInfoParentsQuery = query.toLowerCase().includes('info-parents') || query.toLowerCase().includes('info parents');
+  
+  // For info-parents queries with specific dates, prioritize exact month/year matches
+  if (isInfoParentsQuery) {
+    const queryLower = query.toLowerCase();
+    const monthYearMatch = queryLower.match(/(janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre|january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{4})/i);
+    
+    if (monthYearMatch) {
+      const [, month, year] = monthYearMatch;
+      const monthLower = month.toLowerCase();
+      
+      // Boost scores for chunks that match the exact month and year
+      scoredChunks.forEach(item => {
+        const textLower = item.chunk.text.toLowerCase();
+        const sourceLower = item.chunk.source.toLowerCase();
+        
+        // Check if this chunk mentions the exact month and year
+        const hasExactMonth = textLower.includes(monthLower) || sourceLower.includes(monthLower);
+        const hasExactYear = textLower.includes(year) || sourceLower.includes(year);
+        const hasInfoParents = textLower.includes('info-parents') || textLower.includes('info parents') || sourceLower.includes('info-parents');
+        
+        if (hasExactMonth && hasExactYear && hasInfoParents) {
+          // Significant boost for exact match
+          item.score += 2.0;
+          console.log(`   🎯 Boosted chunk "${item.chunk.source.split('/').pop()}" for exact month/year match: ${month} ${year}`);
+        } else if (hasInfoParents && (hasExactMonth || hasExactYear)) {
+          // Smaller boost for partial match
+          item.score += 0.5;
+        }
+      });
+      
+      // Re-sort after boosting
+      scoredChunks.sort((a, b) => b.score - a.score);
+      
+      // Update topChunks after re-sorting
+      const newTopChunks = scoredChunks
+        .slice(0, maxChunks)
+        .filter(item => item.score > 0);
+      
+      // Replace topChunks if we found better matches
+      if (newTopChunks.length > 0 && newTopChunks[0].score > topChunks[0]?.score) {
+        topChunks.length = 0;
+        topChunks.push(...newTopChunks);
+        console.log(`   ✅ Re-ranked chunks after date matching boost`);
+      }
+    }
+  }
+  
+  // ENHANCED: Final re-ranking after all special handling
+  // Re-rank top chunks one more time using refined criteria
+  if (topChunks.length > 0) {
+    const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+    const finalReranked = topChunks.map(item => {
+      const textLower = item.chunk.text.toLowerCase();
+      
+      // Calculate query term density
+      let termMatches = 0;
+      for (const word of queryWords) {
+        if (textLower.includes(word)) termMatches++;
+      }
+      const termDensity = termMatches / Math.max(queryWords.length, 1);
+      
+      // Check match position
+      const matchPosition = findMatchPosition(query, item.chunk.text);
+      let positionScore = 0;
+      if (matchPosition === 'start' || matchPosition === 'both') positionScore = 0.15;
+      else if (matchPosition === 'end') positionScore = 0.08;
+      
+      // Final score: original + term density + position
+      const finalScore = item.score + (termDensity * 0.1) + positionScore;
+      
+      return {
+        ...item,
+        score: finalScore,
+      };
+    });
+    
+    // Sort by final score
+    finalReranked.sort((a, b) => b.score - a.score);
+    
+    // Update topChunks with re-ranked results
+    topChunks.length = 0;
+    topChunks.push(...finalReranked.slice(0, maxChunks));
   }
   
   if (topChunks.length === 0) {
     // Fallback: return top chunks even with low scores
     console.log(`   ⚠️ No chunks with score > 0, using fallback (top 3 chunks even with low scores)`);
+    
+    // Special fallback for info-parents queries: look for chunks containing "info-parents" pattern
+    if (isInfoParentsQuery) {
+      const infoParentsMatches = scoredChunks.filter(item => 
+        item.chunk.text.toLowerCase().includes('info-parents') || 
+        item.chunk.text.toLowerCase().includes('info parents') ||
+        item.chunk.source.toLowerCase().includes('info-parents') ||
+        item.chunk.source.toLowerCase().includes('info parents')
+      );
+      
+      if (infoParentsMatches.length > 0) {
+        console.log(`   🔍 Info-parents fallback: Found ${infoParentsMatches.length} chunks containing "info-parents" pattern`);
+        // Return top 5 info-parents chunks, sorted by score
+        return infoParentsMatches
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 5)
+          .map(item => ({ ...item.chunk, score: item.score }));
+      } else {
+        console.log(`   ⚠️ Info-parents fallback: No chunks found with "info-parents" pattern`);
+      }
+    }
+    
     return scoredChunks
       .slice(0, Math.min(3, chunks.length))
-      .map(item => item.chunk);
+      .map(item => ({ ...item.chunk, score: item.score }));
+  }
+  
+  // For info-parents queries, enhance results if needed
+  if (isInfoParentsQuery) {
+    const infoParentsInTop = topChunks.filter(item => 
+      item.chunk.text.toLowerCase().includes('info-parents') || 
+      item.chunk.text.toLowerCase().includes('info parents')
+    ).length;
+    
+    if (infoParentsInTop === 0) {
+      console.log(`   ⚠️ WARNING: Top chunks don't contain "info-parents" pattern, but query does!`);
+    }
   }
   
   // Build index of chunks by source and index for neighbor lookup (use filtered chunks)
@@ -873,11 +1143,53 @@ export function findRelevantChunks(
   
   // Collect result chunks, including neighbors when needed
   const resultChunks: TextChunk[] = [];
-  const addedChunkKeys = new Set<string>();
+  const resultAddedChunkKeys = new Set<string>();
+  const resultAddedSources = new Set<string>(); // Track which sources we've added chunks from
   
+  // For info-parents queries, prefer to get ALL chunks from matching documents
+  if (isInfoParentsQuery) {
+    const queryLower = query.toLowerCase();
+    const monthYearMatch = queryLower.match(/(janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre|january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{4})/i);
+    
+    if (monthYearMatch) {
+      const [, month, year] = monthYearMatch;
+      const monthLower = month.toLowerCase();
+      
+      // Find the best matching document (source) that has the exact month/year
+      for (const { chunk } of topChunks) {
+        const textLower = chunk.text.toLowerCase();
+        const hasExactMonth = textLower.includes(monthLower);
+        const hasExactYear = textLower.includes(year);
+        const hasInfoParents = textLower.includes('info-parents') || textLower.includes('info parents');
+        
+        if (hasExactMonth && hasExactYear && hasInfoParents && !resultAddedSources.has(chunk.source)) {
+          // Add ALL chunks from this document
+          const sourceChunks = chunkIndex.get(chunk.source) || [];
+          console.log(`   📄 Adding all ${sourceChunks.length} chunks from matching document: ${chunk.source.split('/').pop()}`);
+          
+          sourceChunks.forEach(sourceChunk => {
+            if (sourceChunk) {
+              const sourceChunkKey = `${sourceChunk.source}:${sourceChunk.index}`;
+              if (!resultAddedChunkKeys.has(sourceChunkKey)) {
+                resultChunks.push(sourceChunk);
+                resultAddedChunkKeys.add(sourceChunkKey);
+              }
+            }
+          });
+          
+          resultAddedSources.add(chunk.source);
+          
+          // Limit to prevent too many chunks
+          if (resultChunks.length >= maxChunks * 3) break;
+        }
+      }
+    }
+  }
+  
+  // Add chunks from top matches (if not already added)
   for (const { chunk } of topChunks) {
     const chunkKey = `${chunk.source}:${chunk.index}`;
-    if (addedChunkKeys.has(chunkKey)) continue;
+    if (resultAddedChunkKeys.has(chunkKey)) continue;
     
     // Check if match is at boundary
     const matchPosition = findMatchPosition(query, chunk.text);
@@ -888,17 +1200,17 @@ export function findRelevantChunks(
       const prevChunk = sourceChunks[chunk.index - 1];
       if (prevChunk) {
         const prevKey = `${prevChunk.source}:${prevChunk.index}`;
-        if (!addedChunkKeys.has(prevKey)) {
+        if (!resultAddedChunkKeys.has(prevKey)) {
           resultChunks.push(prevChunk);
-          addedChunkKeys.add(prevKey);
+          resultAddedChunkKeys.add(prevKey);
         }
       }
     }
     
     // Add the main chunk
-    if (!addedChunkKeys.has(chunkKey)) {
+    if (!resultAddedChunkKeys.has(chunkKey)) {
       resultChunks.push(chunk);
-      addedChunkKeys.add(chunkKey);
+      resultAddedChunkKeys.add(chunkKey);
     }
     
     // Add next chunk if match is at end
@@ -906,15 +1218,15 @@ export function findRelevantChunks(
       const nextChunk = sourceChunks[chunk.index + 1];
       if (nextChunk) {
         const nextKey = `${nextChunk.source}:${nextChunk.index}`;
-        if (!addedChunkKeys.has(nextKey)) {
+        if (!resultAddedChunkKeys.has(nextKey)) {
           resultChunks.push(nextChunk);
-          addedChunkKeys.add(nextKey);
+          resultAddedChunkKeys.add(nextKey);
         }
       }
     }
     
     // Don't add too many chunks (limit to maxChunks + 3 for context)
-    if (resultChunks.length >= maxChunks + 3) break;
+    if (resultChunks.length >= maxChunks * 3) break;
   }
   
   // Sort by source and index to maintain reading order
@@ -923,7 +1235,15 @@ export function findRelevantChunks(
     return a.index - b.index;
   });
   
-  return resultChunks;
+  // Add scores to result chunks for context building
+  const resultWithScores: ChunkWithScore[] = resultChunks.map(chunk => {
+    const scoredItem = scoredChunks.find(item => 
+      item.chunk.source === chunk.source && item.chunk.index === chunk.index
+    );
+    return { ...chunk, score: scoredItem?.score || 0 };
+  });
+  
+  return resultWithScores;
 }
 
 /**
@@ -951,29 +1271,108 @@ export function processDocuments(documents: Array<{ id: string; content: string;
  * Build context string from relevant chunks
  * Limits each chunk size to prevent token limit errors
  */
-export function buildContextString(chunks: TextChunk[]): string {
+export interface ChunkWithScore extends TextChunk {
+  score?: number;
+}
+
+/**
+ * Intelligently truncate chunk text, keeping sentences with query terms
+ */
+function intelligentTruncate(text: string, query: string, maxLength: number): string {
+  if (text.length <= maxLength) {
+    return text;
+  }
+  
+  // Split into sentences (rough heuristic)
+  const sentences = text.split(/(?<=[.!?])\s+/);
+  const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+  
+  // Score each sentence by number of query terms it contains
+  const scoredSentences = sentences.map((sent, idx) => {
+    const sentLower = sent.toLowerCase();
+    const termCount = queryWords.filter(word => sentLower.includes(word)).length;
+    return { sent, idx, termCount };
+  });
+  
+  // Sort by term count (descending), but keep original order for ties
+  scoredSentences.sort((a, b) => b.termCount - a.termCount || a.idx - b.idx);
+  
+  // Take sentences with query terms first, then fill with other sentences
+  let truncated = '';
+  let charCount = 0;
+  const includedIndices = new Set<number>();
+  
+  // First pass: sentences with query terms
+  for (const item of scoredSentences) {
+    if (item.termCount > 0 && charCount + item.sent.length <= maxLength) {
+      truncated += item.sent + ' ';
+      charCount += item.sent.length + 1;
+      includedIndices.add(item.idx);
+    }
+  }
+  
+  // Second pass: fill remaining space with sentences in original order
+  for (let i = 0; i < sentences.length && charCount < maxLength; i++) {
+    if (!includedIndices.has(i)) {
+      if (charCount + sentences[i].length <= maxLength) {
+        truncated += sentences[i] + ' ';
+        charCount += sentences[i].length + 1;
+      } else {
+        break;
+      }
+    }
+  }
+  
+  return truncated.trim() + '\n\n[Chunk truncated to show most relevant sentences...]';
+}
+
+export function buildContextString(chunks: ChunkWithScore[], query?: string): string {
   if (chunks.length === 0) {
     return '';
   }
   
+  // Sort chunks by relevance score (highest first)
+  const sortedChunks = [...chunks].sort((a, b) => (b.score || 0) - (a.score || 0));
+  
   // Limit each chunk to ~300K characters (~75K tokens) to stay within limits
   const MAX_CHUNK_LENGTH = 300000;
   
-  // Collect unique PDF URLs
-  const pdfUrls = new Set<string>();
-  chunks.forEach(chunk => {
-    if (chunk.pdfUrl) {
-      pdfUrls.add(chunk.pdfUrl);
+  // Group chunks by source to find PDF URLs
+  // PDF URL might be in any chunk from the same document, so we need to find it
+  const pdfUrlsBySource = new Map<string, string>();
+  sortedChunks.forEach(chunk => {
+    if (chunk.pdfUrl && !pdfUrlsBySource.has(chunk.source)) {
+      pdfUrlsBySource.set(chunk.source, chunk.pdfUrl);
     }
   });
   
-  const contextParts = chunks.map((chunk, index) => {
-    const chunkText = chunk.text.length > MAX_CHUNK_LENGTH
-      ? chunk.text.substring(0, MAX_CHUNK_LENGTH) + '\n\n[Chunk truncated...]'
-      : chunk.text;
-    let contextPart = `[Context ${index + 1}]\n${chunkText}`;
-    if (chunk.pdfUrl) {
-      contextPart += `\n[Source PDF: ${chunk.pdfUrl}]`;
+  // Collect unique PDF URLs
+  const pdfUrls = new Set<string>();
+  Array.from(pdfUrlsBySource.values()).forEach(url => pdfUrls.add(url));
+  
+  const contextParts = sortedChunks.map((chunk, index) => {
+    // Determine relevance label
+    const score = chunk.score || 0;
+    let relevanceLabel = 'Low';
+    if (score >= 2.0) relevanceLabel = 'High';
+    else if (score >= 1.0) relevanceLabel = 'Medium';
+    
+    // Intelligently truncate if needed
+    let chunkText: string;
+    if (chunk.text.length > MAX_CHUNK_LENGTH && query) {
+      chunkText = intelligentTruncate(chunk.text, query, MAX_CHUNK_LENGTH);
+    } else if (chunk.text.length > MAX_CHUNK_LENGTH) {
+      chunkText = chunk.text.substring(0, MAX_CHUNK_LENGTH) + '\n\n[Chunk truncated...]';
+    } else {
+      chunkText = chunk.text;
+    }
+    
+    let contextPart = `[Context ${index + 1} - Relevance: ${relevanceLabel}${score > 0 ? ` (${score.toFixed(2)})` : ''}]\n${chunkText}`;
+    
+    // Use PDF URL from this chunk, or find it from the same source
+    const pdfUrl = chunk.pdfUrl || pdfUrlsBySource.get(chunk.source);
+    if (pdfUrl) {
+      contextPart += `\n[Source PDF: ${pdfUrl}]`;
     }
     return contextPart;
   });
