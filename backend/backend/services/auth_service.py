@@ -5,9 +5,11 @@ from backend.utils.logger import logger
 
 class AuthService:
     def __init__(self):
-        self.skill_path = Path.home() / ".claude/skills/notebooklm"
-        self.auth_file = Path.home() / ".claude/skills/notebooklm/data/browser_state/state.json"
-        self.auth_script = self.skill_path / "scripts/run.py"
+        # Use local skill path (bundled with project) instead of global Claude Code path
+        project_root = Path(__file__).parent.parent.parent.parent
+        self.skill_path = project_root / "skills" / "notebooklm"
+        self.auth_file = self.skill_path / "data" / "browser_state" / "state.json"
+        self.auth_script = self.skill_path / "scripts" / "run.py"
 
     def _validate_paths(self) -> bool:
         """Validate that required paths exist"""

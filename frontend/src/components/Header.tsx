@@ -11,7 +11,7 @@ export default function Header() {
           <div>
             <h1 className="text-3xl font-bold">Collège Saint-Louis</h1>
             <p className="text-blue-100 text-sm mt-1">
-              Une fenêtre ouverte sur le monde
+              Assistant IA - Une fenêtre ouverte sur le monde
             </p>
           </div>
         </div>

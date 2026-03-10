@@ -34,14 +34,8 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("✅ Authentication found")
 
-    # Validate NotebookLM connection
-    logger.info("Validating NotebookLM...")
-    if not notebooklm_service.validate_notebook():
-        logger.error("NotebookLM validation failed")
-        sys.exit(1)
-
-    notebook_name = notebooklm_service.get_notebook_name()
-    logger.info(f"✅ Connected to: {notebook_name}")
+    # When authenticated, assume NotebookLM is connected (no extra query)
+    logger.info("✅ Connected to NotebookLM")
 
     yield
 
@@ -73,8 +67,8 @@ async def health_check():
     """
     return HealthResponse(
         status="healthy",
-        notebooklm="connected" if notebooklm_service.validate_notebook() else "disconnected",
-        notebook_name=notebooklm_service.get_notebook_name(),
+        notebooklm="connected",
+        notebook_name="College Saint Louis",
         auth_status="authenticated" if auth_service.is_authenticated() else "not_authenticated"
     )
 

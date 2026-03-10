@@ -14,11 +14,13 @@ export default function InputArea({ onSend, disabled }: InputAreaProps) {
   // Auto-resize textarea
   useEffect(() => {
     if (textareaRef.current) {
+      // Reset height to auto to get correct scrollHeight
       textareaRef.current.style.height = "48px";
-      textareaRef.current.style.height = `${Math.min(
-        textareaRef.current.scrollHeight,
-        120
-      )}px`;
+      const scrollHeight = textareaRef.current.scrollHeight;
+      const newHeight = Math.min(scrollHeight, 120); // Max 5 lines (120px)
+      textareaRef.current.style.height = `${newHeight}px`;
+      // Show scrollbar only when content exceeds max height
+      textareaRef.current.style.overflowY = scrollHeight > 120 ? "auto" : "hidden";
     }
   }, [message]);
 
@@ -51,11 +53,13 @@ export default function InputArea({ onSend, disabled }: InputAreaProps) {
               onChange={(e) => setMessage(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Posez votre question..."
-              className="w-full px-4 py-3 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none overflow-y-auto text-gray-900 placeholder-gray-500"
+              className="w-full px-4 py-3 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none overflow-y-auto text-gray-900 placeholder-gray-500 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent"
               rows={1}
               style={{
                 minHeight: "48px",
                 maxHeight: "120px",
+                height: "48px",
+                overflowY: "hidden",
               }}
               disabled={disabled}
               aria-label="Message input field"

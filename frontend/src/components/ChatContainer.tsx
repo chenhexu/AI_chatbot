@@ -67,8 +67,8 @@ export default function ChatContainer() {
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Messages Container */}
+    <div className="flex-1 flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100 overflow-hidden">
+      {/* Messages Container - scrollable area */}
       <div className="flex-1 overflow-y-auto px-4 py-6">
         <div className="max-w-6xl mx-auto space-y-4">
           {messages.map((msg, index) => (
@@ -79,7 +79,7 @@ export default function ChatContainer() {
         </div>
       </div>
 
-      {/* Input Area */}
+      {/* Input Area - fixed at bottom */}
       <InputArea onSend={handleSend} disabled={isLoading} />
     </div>
   );

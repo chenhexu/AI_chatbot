@@ -18,8 +18,8 @@ def test_notebooklm_service_initialization():
     service = NotebookLMService()
     assert service.skill_path is not None
     assert service.notebook_url is not None
-    # Verify paths use consistent directory
-    assert ".claude/skills/notebooklm" in str(service.skill_path)
+    # Verify paths use the local skills directory
+    assert "skills/notebooklm" in str(service.skill_path)
 
 
 def test_query_with_mocked_subprocess():
@@ -107,39 +107,36 @@ def test_detect_english_language():
 
 
 def test_validate_notebook_success():
-    """Test notebook validation when query succeeds"""
+    """Test notebook validation when subprocess succeeds"""
     service = NotebookLMService()
 
-    with patch.object(service, 'query', return_value={"answer": "Test Notebook"}):
+    with patch('subprocess.run') as mock_run:
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "test response"
+        mock_run.return_value = mock_result
+
         result = service.validate_notebook()
         assert result is True
 
 
 def test_validate_notebook_failure():
-    """Test notebook validation when query fails"""
+    """Test notebook validation when subprocess fails"""
     service = NotebookLMService()
 
-    with patch.object(service, 'query', side_effect=Exception("Query failed")):
+    with patch('subprocess.run') as mock_run:
+        import subprocess
+        mock_run.side_effect = Exception("Command failed")
+
         result = service.validate_notebook()
         assert result is False
 
 
-def test_get_notebook_name_success():
-    """Test getting notebook name when query succeeds"""
+def test_get_notebook_name():
+    """Test getting notebook name returns cached value"""
     service = NotebookLMService()
-
-    with patch.object(service, 'query', return_value={"answer": "My AI Notebook"}):
-        name = service.get_notebook_name()
-        assert name == "My AI Notebook"
-
-
-def test_get_notebook_name_failure():
-    """Test getting notebook name when query fails"""
-    service = NotebookLMService()
-
-    with patch.object(service, 'query', side_effect=Exception("Query failed")):
-        name = service.get_notebook_name()
-        assert name == "Unknown Notebook"
+    name = service.get_notebook_name()
+    assert name == "College Saint Louis"
 
 
 def test_query_with_empty_string():

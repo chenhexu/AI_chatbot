@@ -9,35 +9,77 @@ NC='\033[0m'
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_DIR="$PROJECT_ROOT/logs"
 
+# Default ports
+BACKEND_PORT=8086
+FRONTEND_PORT=3086
+
+# Read ports from .env if exists
+if [ -f "$PROJECT_ROOT/backend/.env" ]; then
+    while IFS='=' read -r key value; do
+        # Skip comments and empty lines
+        [[ "$key" =~ ^#.*$ ]] && continue
+        [[ -z "$key" ]] && continue
+
+        # Remove surrounding whitespace
+        key=$(echo "$key" | xargs)
+        value=$(echo "$value" | xargs)
+
+        # Remove quotes if present
+        value="${value%\"}"
+        value="${value%\'}"
+        value="${value#\"}"
+        value="${value#\'}"
+
+        case "$key" in
+            BACKEND_PORT)
+                BACKEND_PORT="$value"
+                ;;
+            FRONTEND_URL)
+                # Extract port from URL like http://localhost:3086
+                if [[ "$value" =~ :([0-9]+) ]]; then
+                    FRONTEND_PORT="${BASH_REMATCH[1]}"
+                fi
+                ;;
+        esac
+    done < "$PROJECT_ROOT/backend/.env"
+fi
+
 echo -e "${YELLOW}=== Stopping Services ===${NC}"
+echo -e "${YELLOW}Backend Port: $BACKEND_PORT${NC}"
+echo -e "${YELLOW}Frontend Port: $FRONTEND_PORT${NC}"
 echo ""
 
-if [ -f "$LOG_DIR/backend.pid" ]; then
-    BACKEND_PID=$(cat "$LOG_DIR/backend.pid")
-    if ps -p $BACKEND_PID > /dev/null 2>&1; then
-        echo -e "${YELLOW}Stopping backend (PID: $BACKEND_PID)...${NC}"
-        kill $BACKEND_PID
-        echo -e "${GREEN}✓ Backend stopped${NC}"
-    else
-        echo -e "${YELLOW}Backend already stopped${NC}"
-    fi
-    rm -f "$LOG_DIR/backend.pid"
-fi
+# Function to kill process by port (only LISTENING state)
+kill_by_port() {
+    local port=$1
+    local service_name=$2
 
-if [ -f "$LOG_DIR/frontend.pid" ]; then
-    FRONTEND_PID=$(cat "$LOG_DIR/frontend.pid")
-    if ps -p $FRONTEND_PID > /dev/null 2>&1; then
-        echo -e "${YELLOW}Stopping frontend (PID: $FRONTEND_PID)...${NC}"
-        kill $FRONTEND_PID
-        echo -e "${GREEN}✓ Frontend stopped${NC}"
-    else
-        echo -e "${YELLOW}Frontend already stopped${NC}"
-    fi
-    rm -f "$LOG_DIR/frontend.pid"
-fi
+    # Find PID LISTENING on the port (not just connections)
+    local pid=$(lsof -ti:$port -sTCP:LISTEN -sTCP:CLOSED 2>/dev/null || true)
 
-pkill -f "uvicorn main:app" 2>/dev/null || true
-pkill -f "next-server" 2>/dev/null || true
+    if [ -n "$pid" ]; then
+        echo -e "${YELLOW}Stopping $service_name (PID: $pid, Port: $port)...${NC}"
+        kill $pid 2>/dev/null || true
+        # Wait a bit for graceful shutdown
+        sleep 1
+        # Force kill if still running
+        if ps -p $pid > /dev/null 2>&1; then
+            kill -9 $pid 2>/dev/null || true
+        fi
+        echo -e "${GREEN}✓ $service_name stopped${NC}"
+        return 0
+    else
+        echo -e "${YELLOW}No process listening on port $port${NC}"
+        return 1
+    fi
+}
+
+# Stop services by port (continue even if one fails)
+kill_by_port $BACKEND_PORT "Backend" || true
+kill_by_port $FRONTEND_PORT "Frontend" || true
+
+# Clean up PID files
+rm -f "$LOG_DIR/backend.pid" "$LOG_DIR/frontend.pid" 2>/dev/null || true
 
 echo ""
 echo -e "${GREEN}=== All Services Stopped ===${NC}"
