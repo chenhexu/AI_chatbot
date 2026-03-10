@@ -6,7 +6,18 @@ from backend.utils.logger import logger
 class AuthService:
     def __init__(self):
         self.skill_path = Path.home() / ".claude/skills/notebooklm"
-        self.auth_file = Path.home() / ".agents/skills/notebooklm/data/browser_state/state.json"
+        self.auth_file = Path.home() / ".claude/skills/notebooklm/data/browser_state/state.json"
+        self.auth_script = self.skill_path / "scripts/run.py"
+
+    def _validate_paths(self) -> bool:
+        """Validate that required paths exist"""
+        if not self.skill_path.exists():
+            logger.error(f"❌ Skill path does not exist: {self.skill_path}")
+            return False
+        if not self.auth_script.exists():
+            logger.error(f"❌ Authentication script does not exist: {self.auth_script}")
+            return False
+        return True
 
     def is_authenticated(self) -> bool:
         """Check if Google authentication exists"""
@@ -17,6 +28,10 @@ class AuthService:
         if self.is_authenticated():
             logger.info("✅ Already authenticated")
             return True
+
+        # Validate paths before attempting authentication
+        if not self._validate_paths():
+            return False
 
         logger.info("🔐 Starting authentication...")
         try:
