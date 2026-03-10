@@ -6,21 +6,28 @@ from fastapi.testclient import TestClient
 @pytest.fixture
 def mock_services():
     """Mock auth and notebooklm services"""
-    with patch('backend.main.auth_service') as mock_auth, \
-         patch('backend.main.notebooklm_service') as mock_notebooklm:
+    # Mock the service factory functions
+    with patch('backend.main.get_auth_service') as mock_get_auth, \
+         patch('backend.main.get_notebooklm') as mock_get_nl:
 
-        # Mock auth service
+        # Create mock service instances
+        mock_auth = Mock()
+        mock_notebooklm = Mock()
+
+        # Configure auth service mock
         mock_auth.is_authenticated.return_value = True
         mock_auth.authenticate.return_value = True
 
-        # Mock notebooklm service
-        mock_notebooklm.validate_notebook.return_value = True
-        mock_notebooklm.get_notebook_name.return_value = "Test Notebook"
+        # Configure notebooklm service mock
         mock_notebooklm.query.return_value = {
             "answer": "Test answer",
             "language": "en",
             "sources": ["source1", "source2"]
         }
+
+        # Make the getter functions return our mocks
+        mock_get_auth.return_value = mock_auth
+        mock_get_nl.return_value = mock_notebooklm
 
         yield mock_auth, mock_notebooklm
 

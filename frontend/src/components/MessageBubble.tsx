@@ -78,7 +78,7 @@ export default function MessageBubble({ role, content, timestamp }: MessageBubbl
               ),
               thead: (props: any) => (
                 <thead className={isUser ? "bg-blue-400" : "bg-gray-50"}>
-                  <tr>{props.children}</tr>
+                  {props.children}
                 </thead>
               ),
               th: (props: any) => (
@@ -105,7 +105,7 @@ export default function MessageBubble({ role, content, timestamp }: MessageBubbl
                 const { node, inline, ...rest } = props;
                 if (inline) {
                   return (
-                    <code className={`px-1.5 py-0.5 rounded text-sm font-mono font-semibold ${isUser ? "bg-blue-500 text-white" : "bg-gray-100 text-red-600"}`}>
+                    <code className={`px-1.5 py-0.5 rounded text-sm font-mono font-semibold ${isUser ? "bg-blue-500 text-white" : "bg-gray-100 text-purple-600"}`}>
                       {rest.children}
                     </code>
                   );
@@ -159,7 +159,7 @@ export default function MessageBubble({ role, content, timestamp }: MessageBubbl
                 </h5>
               ),
               h6: (props: any) => (
-                <h6 className={`text-xs font-semibold mt-1 mb-1 ${isUser ? "text-blue-100" : "text-gray-600"}`} {...props}>
+                <h6 className={`text-xs font-semibold mt-1 mb-1 ${isUser ? "text-white" : "text-gray-600"}`} {...props}>
                   {props.children}
                 </h6>
               ),

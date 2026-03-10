@@ -4,10 +4,12 @@ set -e
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m'
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_DIR="$PROJECT_ROOT/logs"
+BACKEND_ENV="$PROJECT_ROOT/backend/.env"
 
 mkdir -p "$LOG_DIR"
 
@@ -15,58 +17,92 @@ echo -e "${GREEN}=== NotebookLM Chatbot Starter ===${NC}"
 echo ""
 
 MODE="${1:-prod}"
-if [ "$MODE" = "dev" ]; then
-    echo -e "${YELLOW}Mode: DEVELOPMENT${NC}"
-else
-    echo -e "${YELLOW}Mode: PRODUCTION${NC}"
-fi
+
+# Parse mode argument
+case "$MODE" in
+    "dev")
+        echo -e "${YELLOW}Mode: DEVELOPMENT${NC}"
+        echo -e "${BLUE}  - Real NotebookLM backend${NC}"
+        echo -e "${BLUE}  - Dev frontend (hot reload)${NC}"
+        USE_MOCK=false
+        ;;
+    "mock")
+        echo -e "${YELLOW}Mode: MOCK${NC}"
+        echo -e "${BLUE}  - Mock NotebookLM backend${NC}"
+        echo -e "${BLUE}  - Dev frontend (hot reload)${NC}"
+        USE_MOCK=true
+        ;;
+    "prod"|"")
+        echo -e "${YELLOW}Mode: PRODUCTION${NC}"
+        echo -e "${BLUE}  - Real NotebookLM backend${NC}"
+        echo -e "${BLUE}  - Production frontend${NC}"
+        USE_MOCK=false
+        ;;
+    *)
+        echo -e "${RED}Error: Invalid mode '$MODE'${NC}"
+        echo ""
+        echo "Usage: $0 [mode]"
+        echo "  Modes:"
+        echo "    (empty) - Production: real notebooklm + prod frontend"
+        echo "    dev     - Development: real notebooklm + dev frontend"
+        echo "    mock    - Mock: mock notebooklm + dev frontend"
+        exit 1
+        ;;
+esac
+
+# Derive mode-specific booleans
+IS_DEV_MODE=$([ "$MODE" = "dev" ] || [ "$MODE" = "mock" ] && echo true || echo false)
 echo ""
 
-echo -e "${GREEN}[1/5] Installing backend dependencies...${NC}"
+echo -e "${GREEN}[1/6] Installing backend dependencies...${NC}"
 cd "$PROJECT_ROOT/backend"
 uv sync
 echo -e "${GREEN}✓ Backend dependencies installed${NC}"
 
-echo -e "${GREEN}[2/5] Checking Chrome for Patchright...${NC}"
+# Export mode-specific environment variables for child processes
+export MOCK_NOTEBOOKLM="$USE_MOCK"
+echo -e "${GREEN}✓ Backend mode configured${NC}"
+
+echo -e "${GREEN}[3/6] Checking Chrome for Patchright...${NC}"
 cd "$PROJECT_ROOT/backend"
 # Install Chrome browser for patchright (required for browser automation)
-if ! uv run patchright install chrome 2>/dev/null; then
+if ! uv run python -m patchright install chrome 2>/dev/null; then
     echo -e "${YELLOW}Installing Chrome for Patchright...${NC}"
-    uv run patchright install chrome
+    uv run python -m patchright install chrome
 fi
 echo -e "${GREEN}✓ Chrome ready for Patchright${NC}"
 
-echo -e "${GREEN}[3/5] Installing frontend dependencies...${NC}"
+echo -e "${GREEN}[4/6] Installing frontend dependencies...${NC}"
 cd "$PROJECT_ROOT/frontend"
 if [ ! -d "node_modules" ]; then
     npm install
 fi
 echo -e "${GREEN}✓ Frontend dependencies installed${NC}"
 
-echo -e "${GREEN}[4/5] Stopping existing services...${NC}"
+echo -e "${GREEN}[5/6] Stopping existing services...${NC}"
 cd "$PROJECT_ROOT"
 ./stop.sh 2>/dev/null || true
 echo -e "${GREEN}✓ Existing services stopped${NC}"
 
-echo -e "${GREEN}[5/5] Starting services...${NC}"
+echo -e "${GREEN}[6/6] Starting services...${NC}"
 
-if [ "$MODE" = "dev" ]; then
-    cd "$PROJECT_ROOT/backend"
-    nohup uv run uvicorn backend.main:app --host 127.0.0.1 --port 8086 --reload > "$LOG_DIR/backend.log" 2>&1 &
-    BACKEND_PID=$!
-    echo $BACKEND_PID > "$LOG_DIR/backend.pid"
+# Start backend with appropriate mode
+cd "$PROJECT_ROOT/backend"
+if [ "$IS_DEV_MODE" = true ]; then
+    nohup uv run python -m uvicorn backend.main:app --host 127.0.0.1 --port 8086 --reload > "$LOG_DIR/backend.log" 2>&1 &
+else
+    nohup uv run python -m uvicorn backend.main:app --host 127.0.0.1 --port 8086 > "$LOG_DIR/backend.log" 2>&1 &
+fi
+BACKEND_PID=$!
+echo $BACKEND_PID > "$LOG_DIR/backend.pid"
 
-    cd "$PROJECT_ROOT/frontend"
+# Start frontend
+cd "$PROJECT_ROOT/frontend"
+if [ "$IS_DEV_MODE" = true ]; then
     nohup npm run dev -- -p 3086 > "$LOG_DIR/frontend.log" 2>&1 &
     FRONTEND_PID=$!
     echo $FRONTEND_PID > "$LOG_DIR/frontend.pid"
 else
-    cd "$PROJECT_ROOT/backend"
-    nohup uv run uvicorn backend.main:app --host 127.0.0.1 --port 8086 > "$LOG_DIR/backend.log" 2>&1 &
-    BACKEND_PID=$!
-    echo $BACKEND_PID > "$LOG_DIR/backend.pid"
-
-    cd "$PROJECT_ROOT/frontend"
     nohup npm run build > "$LOG_DIR/frontend-build.log" 2>&1
     nohup npm run start -- -p 3086 > "$LOG_DIR/frontend.log" 2>&1 &
     FRONTEND_PID=$!

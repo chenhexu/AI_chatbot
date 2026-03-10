@@ -1,10 +1,15 @@
 # Dependencies
-frontend/node_modules/
-backend/.venv/
-backend/uv.lock
+node_modules/
+.venv/
+uv.lock
+.swc/
+dist/
+build/
+*.egg-info/
+package-lock.json
 
 # Environment
-backend/.env
+.env
 .pytest_cache/
 __pycache__/
 
@@ -23,3 +28,8 @@ Thumbs.db
 # Next.js
 frontend/.next/
 frontend/out/
+
+# Test Reports
+test-reports/
+ui-test-screenshots/
+.playwright-mcp/

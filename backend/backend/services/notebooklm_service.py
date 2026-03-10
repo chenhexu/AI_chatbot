@@ -6,6 +6,13 @@ from backend.utils.logger import logger
 from backend.utils.config import config
 
 
+# Security: Maximum question length to prevent DoS
+MAX_QUESTION_LENGTH = 2000
+
+# Security: Dangerous shell metacharacters that must be removed
+DANGEROUS_CHARS_PATTERN = re.compile(r'[;&|`$()<>\\]')
+
+
 class NotebookLMService:
     """Service for querying NotebookLM via CLI skill"""
 
@@ -14,6 +21,36 @@ class NotebookLMService:
         project_root = Path(__file__).parent.parent.parent.parent
         self.skill_path = project_root / "skills" / "notebooklm"
         self.notebook_url = config.NOTEBOOKLM_URL
+
+    def _sanitize_question(self, question: str) -> str:
+        """
+        Sanitize user input to prevent command injection while allowing international text.
+
+        This function removes dangerous shell metacharacters while preserving
+        text in multiple languages (Chinese, French, English, etc.)
+
+        Args:
+            question: Raw user question
+
+        Returns:
+            Sanitized question
+
+        Raises:
+            ValueError: If question exceeds max length or becomes empty after sanitization
+        """
+        # Check length first
+        if len(question) > MAX_QUESTION_LENGTH:
+            raise ValueError(f"Question exceeds maximum length of {MAX_QUESTION_LENGTH} characters")
+
+        # Remove dangerous shell metacharacters that could enable command injection
+        # This preserves all other characters including international text
+        sanitized = DANGEROUS_CHARS_PATTERN.sub('', question.strip())
+
+        # Verify we still have content after sanitization
+        if not sanitized:
+            raise ValueError("Question cannot be empty or contain only special characters")
+
+        return sanitized
 
     def query(self, question: str) -> Dict[str, Any]:
         """
@@ -26,14 +63,16 @@ class NotebookLMService:
             Dict containing answer, sources, and language
 
         Raises:
-            ValueError: If question is empty or whitespace
+            ValueError: If question is empty, whitespace, or contains invalid characters
             Exception: If query fails or times out
         """
-        # Input validation
+        # Input validation and sanitization
         if not question or not question.strip():
             raise ValueError("Question cannot be empty or whitespace")
 
-        logger.info(f"Querying NotebookLM: {question}")
+        question = self._sanitize_question(question)
+
+        logger.info(f"Querying NotebookLM")  # Don't log user questions for privacy
         try:
             result = subprocess.run(
                 ["python3", "scripts/run.py", "ask_question.py",

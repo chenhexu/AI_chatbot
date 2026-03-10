@@ -20,7 +20,7 @@ This is a full-stack chatbot application that provides AI-powered Q&A using Goog
 ## Project Structure
 
 ```
-nblm-agent/
+stl-chatbot-nblm/
 ├── frontend/              # Next.js frontend application
 │   ├── src/
 │   │   ├── app/          # Next.js App Router
@@ -33,8 +33,15 @@ nblm-agent/
 │   │   │   ├── InputArea.tsx        # Message input
 │   │   │   ├── MessageBubble.tsx    # Message display with markdown
 │   │   │   └── LoadingIndicator.tsx # Typing indicator
+│   │   ├── __tests__/   # Frontend tests
+│   │   │   ├── components/          # Component tests
+│   │   │   ├── integration/         # Integration tests
+│   │   │   ├── mocks/               # Test mocks
+│   │   │   └── test-data/           # Test data fixtures
 │   │   └── styles/
 │   │       └── globals.css
+│   ├── jest.config.js   # Jest testing configuration
+│   ├── jest.setup.js    # Jest test setup
 │   ├── package.json
 │   └── tailwind.config.ts
 ├── backend/              # FastAPI backend
@@ -50,13 +57,22 @@ nblm-agent/
 │   │       └── logger.py
 │   ├── tests/            # Backend tests
 │   └── .env.example
+├── tests/                # Integration tests
+├── docs/                 # Project documentation
+│   ├── test-reports/     # UI test reports and findings
+│   │   ├── UI_TEST_REPORT.md       # Comprehensive UI test report
+│   │   ├── UI_TEST_FINDINGS.md     # Quick reference for test findings
+│   │   └── screenshots/            # UI test screenshots
+│   ├── TESTING.md        # UI testing documentation
+│   ├── QUICK_TEST_REFERENCE.md  # Quick test reference guide
+│   └── UI_TEST_SUITE_SUMMARY.md  # Test suite implementation summary
+├── scripts/              # Utility scripts
+│   └── test-runner.sh    # Test runner script
 ├── skills/               # Bundled NotebookLM skill (no Claude Code required)
 │   └── notebooklm/       # NotebookLM CLI skill scripts
 │       ├── scripts/      # Python scripts for NotebookLM interaction
 │       ├── data/         # Browser state and authentication (auto-generated)
 │       └── requirements.txt
-├── tests/                # Integration tests
-├── docs/                 # Project documentation
 ├── logs/                 # Application logs
 ├── start.sh              # Start script
 └── stop.sh               # Stop script
@@ -92,12 +108,23 @@ cp backend/.env.example backend/.env
 **IMPORTANT**: Always use the provided scripts to manage services.
 
 ```bash
-# Development mode (with hot reload)
+# Production mode: real notebooklm + prod frontend
+./start.sh
+
+# Development mode: real notebooklm + dev frontend (hot reload)
 ./start.sh dev
 
-# Production mode
-./start.sh
+# Mock mode: mock notebooklm + dev frontend (for testing without Chrome)
+./start.sh mock
 ```
+
+**Mode Comparison:**
+
+| Mode | Backend | Frontend | Use Case |
+|------|---------|----------|----------|
+| `prod` (default) | Real NotebookLM | Production build | Production deployment |
+| `dev` | Real NotebookLM | Development server | Frontend/backend development |
+| `mock` | Mock NotebookLM | Development server | Testing without Chrome/NotebookLM |
 
 ### Stopping Services
 
@@ -173,6 +200,36 @@ npm run dev
 
 ## Testing
 
+### Frontend Tests
+
+The project includes a comprehensive UI test suite with 200+ test cases.
+
+```bash
+# From frontend directory
+cd frontend
+
+# Run all tests
+npm test
+
+# Run tests in watch mode
+npm run test:watch
+
+# Generate coverage report
+npm run test:coverage
+
+# Run specific test categories
+npm test -- --testNamePattern="table"
+npm test -- --testNamePattern="list"
+npm test -- --testNamePattern="color"
+```
+
+**Test Documentation:**
+- `docs/TESTING.md` - Comprehensive testing guide
+- `docs/QUICK_TEST_REFERENCE.md` - Quick reference for testing
+- `docs/UI_TEST_SUITE_SUMMARY.md` - Test suite implementation details
+- `docs/test-reports/UI_TEST_REPORT.md` - Detailed UI test findings
+- `docs/test-reports/UI_TEST_FINDINGS.md` - Quick reference for test findings
+
 ### Backend Tests
 
 ```bash
@@ -198,6 +255,7 @@ Located in `backend/.env`:
 - `NOTEBOOKLM_URL`: Your Google NotebookLM notebook URL
 - `BACKEND_PORT`: Backend server port (default: 8086)
 - `FRONTEND_URL`: Frontend URL for CORS (default: http://localhost:3086)
+- `MOCK_NOTEBOOKLM`: Set to `true` to use mock responses instead of real NotebookLM (automatically managed by `./start.sh mock`)
 
 ## Key Features
 
