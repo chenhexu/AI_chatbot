@@ -39,6 +39,7 @@ export default function ChatContainer() {
         { role: "assistant", content: data.answer },
       ]);
     } catch (error) {
+      console.error("Chat API error:", error);
       setMessages((prev) => [
         ...prev,
         {

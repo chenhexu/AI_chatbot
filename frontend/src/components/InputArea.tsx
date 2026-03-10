@@ -29,6 +29,7 @@ export default function InputArea({ onSend, disabled }: InputAreaProps) {
             className="flex-1 border rounded-lg px-4 py-2 resize-none"
             rows={2}
             disabled={disabled}
+            aria-label="Message input field"
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
