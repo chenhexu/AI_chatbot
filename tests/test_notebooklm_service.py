@@ -140,3 +140,21 @@ def test_get_notebook_name_failure():
     with patch.object(service, 'query', side_effect=Exception("Query failed")):
         name = service.get_notebook_name()
         assert name == "Unknown Notebook"
+
+
+def test_query_with_empty_string():
+    """Test that query raises ValueError for empty string"""
+    service = NotebookLMService()
+
+    with pytest.raises(ValueError) as exc_info:
+        service.query("")
+    assert "Question cannot be empty or whitespace" in str(exc_info.value)
+
+
+def test_query_with_whitespace_only():
+    """Test that query raises ValueError for whitespace-only string"""
+    service = NotebookLMService()
+
+    with pytest.raises(ValueError) as exc_info:
+        service.query("   \t\n  ")
+    assert "Question cannot be empty or whitespace" in str(exc_info.value)

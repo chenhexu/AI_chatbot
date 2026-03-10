@@ -24,8 +24,13 @@ class NotebookLMService:
             Dict containing answer, sources, and language
 
         Raises:
+            ValueError: If question is empty or whitespace
             Exception: If query fails or times out
         """
+        # Input validation
+        if not question or not question.strip():
+            raise ValueError("Question cannot be empty or whitespace")
+
         logger.info(f"Querying NotebookLM: {question}")
         try:
             result = subprocess.run(
@@ -105,5 +110,5 @@ class NotebookLMService:
         try:
             result = self.query("What is the name of this notebook? Answer with only the name.")
             return result.get("answer", "Unknown Notebook")
-        except:
+        except Exception:
             return "Unknown Notebook"
