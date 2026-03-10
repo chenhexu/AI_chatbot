@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List
 
 class ChatRequest(BaseModel):
@@ -9,7 +9,7 @@ class ChatResponse(BaseModel):
     answer: str = Field(..., description="Answer from NotebookLM")
     language: str = Field(default="auto", description="Response language")
     sources: List[str] = Field(default_factory=list, description="Source documents")
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class HealthResponse(BaseModel):
     status: str = Field(default="healthy")

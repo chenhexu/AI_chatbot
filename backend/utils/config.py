@@ -9,9 +9,24 @@ class Config:
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3086")
 
     @classmethod
+    def _validate_url(cls, url: str, name: str) -> bool:
+        """Validate URL format."""
+        if not url:
+            return True  # Empty URLs are checked elsewhere
+
+        if not url.startswith(("http://", "https://")):
+            raise ValueError(f"{name} must start with http:// or https://")
+
+        return True
+
+    @classmethod
     def validate(cls) -> bool:
         if not cls.NOTEBOOKLM_URL:
             raise ValueError("NOTEBOOKLM_URL is required")
+
+        cls._validate_url(cls.NOTEBOOKLM_URL, "NOTEBOOKLM_URL")
+        cls._validate_url(cls.FRONTEND_URL, "FRONTEND_URL")
+
         return True
 
 config = Config()

@@ -1,5 +1,5 @@
 import pytest
-from models.schemas import ChatRequest, ChatResponse
+from backend.models.schemas import ChatRequest, ChatResponse
 
 def test_chat_request_valid():
     request = ChatRequest(message="Hello")
