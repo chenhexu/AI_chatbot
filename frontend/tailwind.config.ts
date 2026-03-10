@@ -18,6 +18,15 @@ const config: Config = {
           light: "#e8c047",
         },
       },
+      animation: {
+        bounce: "bounce 1s infinite",
+      },
+      keyframes: {
+        bounce: {
+          "0%, 100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(-0.25rem)" },
+        },
+      },
     },
   },
   plugins: [],
