@@ -6,11 +6,16 @@ export const metadata: Metadata = {
   description: "Une fenêtre ouverte sur le monde",
 };
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+};
+
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
-}) {
+}): React.JSX.Element {
   return (
     <html lang="fr">
       <body>{children}</body>
