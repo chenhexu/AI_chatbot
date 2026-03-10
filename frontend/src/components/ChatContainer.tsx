@@ -8,6 +8,7 @@ import LoadingIndicator from "./LoadingIndicator";
 interface Message {
   role: "user" | "assistant";
   content: string;
+  timestamp?: string;
 }
 
 export default function ChatContainer() {
@@ -16,6 +17,7 @@ export default function ChatContainer() {
       role: "assistant",
       content:
         "Bonjour! Je suis l'assistant du Collège Saint-Louis. Comment puis-je vous aider?",
+      timestamp: new Date().toISOString(),
     },
   ]);
   const [isLoading, setIsLoading] = useState(false);
@@ -30,7 +32,8 @@ export default function ChatContainer() {
   }, [messages, isLoading]);
 
   const handleSend = async (message: string) => {
-    setMessages((prev) => [...prev, { role: "user", content: message }]);
+    const now = new Date().toISOString();
+    setMessages((prev) => [...prev, { role: "user", content: message, timestamp: now }]);
     setIsLoading(true);
 
     try {
@@ -49,7 +52,7 @@ export default function ChatContainer() {
 
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: responseText },
+        { role: "assistant", content: responseText, timestamp: new Date().toISOString() },
       ]);
     } catch (error) {
       console.error("Chat API error:", error);
@@ -59,6 +62,7 @@ export default function ChatContainer() {
           role: "assistant",
           content:
             "⚠️ Désolé, une erreur s'est produite. Veuillez réessayer.",
+          timestamp: new Date().toISOString(),
         },
       ]);
     } finally {

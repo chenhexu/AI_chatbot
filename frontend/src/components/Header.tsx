@@ -3,9 +3,9 @@ export default function Header() {
     <header className="bg-gradient-to-r from-blue-600 to-blue-800 text-white shadow-lg">
       <div className="max-w-6xl mx-auto px-4 py-6">
         <div className="flex items-center gap-4">
-          {/* Logo placeholder */}
-          <div className="w-14 h-14 bg-blue-400 rounded-lg flex items-center justify-center shadow-md">
-            <span className="text-3xl">🏫</span>
+          {/* Logo placeholder - transparent background */}
+          <div className="flex items-center justify-center">
+            <span className="text-5xl">🏫</span>
           </div>
 
           <div>

@@ -55,7 +55,7 @@ kill_by_port() {
     local service_name=$2
 
     # Find PID LISTENING on the port (not just connections)
-    local pid=$(lsof -ti:$port -sTCP:LISTEN -sTCP:CLOSED 2>/dev/null || true)
+    local pid=$(lsof -ti:$port -sTCP:LISTEN -sTCP:CLOSED -sTCP:CLOSE_WAIT 2>/dev/null || true)
 
     if [ -n "$pid" ]; then
         echo -e "${YELLOW}Stopping $service_name (PID: $pid, Port: $port)...${NC}"

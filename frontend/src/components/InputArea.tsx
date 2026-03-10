@@ -45,7 +45,7 @@ export default function InputArea({ onSend, disabled }: InputAreaProps) {
   return (
     <div className="border-t border-gray-200 bg-white px-4 py-4">
       <form onSubmit={handleSubmit} className="max-w-6xl mx-auto">
-        <div className="flex items-end gap-3">
+        <div className="flex items-center gap-3">
           <div className="flex-1 relative">
             <textarea
               ref={textareaRef}
@@ -68,9 +68,11 @@ export default function InputArea({ onSend, disabled }: InputAreaProps) {
           <button
             type="submit"
             disabled={disabled || !message.trim()}
-            className="px-6 py-3 bg-blue-600 text-white rounded-2xl font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="h-12 px-5 bg-blue-600 text-white rounded-2xl font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 shrink-0"
+            aria-label="Envoyer le message"
           >
-            Envoyer
+            <span>➤</span>
+            <span>Envoyer</span>
           </button>
         </div>
       </form>
