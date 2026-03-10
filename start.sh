@@ -42,8 +42,8 @@ echo -e "${GREEN}✓ Existing services stopped${NC}"
 echo -e "${GREEN}[4/4] Starting services...${NC}"
 
 if [ "$MODE" = "dev" ]; then
-    cd backend
-    nohup uv run uvicorn main:app --host 127.0.0.1 --port 8086 --reload > "$LOG_DIR/backend.log" 2>&1 &
+    cd "$PROJECT_ROOT/backend"
+    nohup uv run uvicorn backend.main:app --host 127.0.0.1 --port 8086 --reload > "$LOG_DIR/backend.log" 2>&1 &
     BACKEND_PID=$!
     echo $BACKEND_PID > "$LOG_DIR/backend.pid"
 
@@ -52,12 +52,13 @@ if [ "$MODE" = "dev" ]; then
     FRONTEND_PID=$!
     echo $FRONTEND_PID > "$LOG_DIR/frontend.pid"
 else
-    cd backend
-    nohup uv run uvicorn main:app --host 127.0.0.1 --port 8086 > "$LOG_DIR/backend.log" 2>&1 &
+    cd "$PROJECT_ROOT/backend"
+    nohup uv run uvicorn backend.main:app --host 127.0.0.1 --port 8086 > "$LOG_DIR/backend.log" 2>&1 &
     BACKEND_PID=$!
     echo $BACKEND_PID > "$LOG_DIR/backend.pid"
 
     cd "$PROJECT_ROOT/frontend"
+    nohup npm run build > "$LOG_DIR/frontend-build.log" 2>&1
     nohup npm run start -- -p 3086 > "$LOG_DIR/frontend.log" 2>&1 &
     FRONTEND_PID=$!
     echo $FRONTEND_PID > "$LOG_DIR/frontend.pid"

@@ -5,10 +5,11 @@ backend/uv.lock
 
 # Environment
 backend/.env
+.pytest_cache/
+__pycache__/
 
 # Logs
-logs/*.log
-logs/*.pid
+logs/
 
 # IDE
 .vscode/
