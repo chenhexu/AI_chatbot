@@ -19,7 +19,7 @@ interface ErrorResponse {
 
 // Backend URL from environment with fallback
 const BACKEND_URL = process.env.BACKEND_URL || "http://127.0.0.1:8086";
-const REQUEST_TIMEOUT = 30000; // 30 seconds
+const REQUEST_TIMEOUT = 120000; // 120 seconds (2 minutes) - NotebookLM can take longer to process queries
 
 // Helper function to create timeout promise
 function createTimeoutPromise(ms: number): Promise<never> {
