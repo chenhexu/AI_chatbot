@@ -61,6 +61,7 @@ echo -e "${GREEN}✓ Backend dependencies installed${NC}"
 
 # Export mode-specific environment variables for child processes
 export MOCK_NOTEBOOKLM="$USE_MOCK"
+export DEBUG="$([ "$IS_DEV_MODE" = true ] && echo "1" || echo "0")"
 echo -e "${GREEN}✓ Backend mode configured${NC}"
 
 echo -e "${GREEN}[3/6] Checking Chrome for Patchright...${NC}"

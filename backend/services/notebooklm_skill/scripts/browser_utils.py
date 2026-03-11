@@ -25,7 +25,7 @@ class BrowserFactory:
         Launch a persistent browser context with anti-detection features
         and cookie workaround.
         """
-        # Launch persistent context
+        # Launch persistent context with permissions for clipboard access
         context = playwright.chromium.launch_persistent_context(
             user_data_dir=user_data_dir,
             channel="chrome",  # Use real Chrome
@@ -33,7 +33,8 @@ class BrowserFactory:
             no_viewport=True,
             ignore_default_args=["--enable-automation"],
             user_agent=USER_AGENT,
-            args=BROWSER_ARGS
+            args=BROWSER_ARGS,
+            permissions=['clipboard-read', 'clipboard-write']  # Grant clipboard permissions
         )
 
         # Cookie Workaround for Playwright bug #36139

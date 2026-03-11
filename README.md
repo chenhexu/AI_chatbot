@@ -2,81 +2,93 @@
 
 A web chatbot for answering questions about Collège Saint-Louis using Google NotebookLM.
 
-## Features
+**Author:** Tony Xu
 
-- 🤖 AI-powered Q&A using Google NotebookLM
-- 🌍 Multi-language support (French, English, Chinese)
-- 📊 Rich media display (tables, charts, images)
-- 🎨 School-themed design
-- 🔒 Secure backend (internal only)
+## Introduction
 
-## Quick Start
+This is a full-stack chatbot that provides AI-powered Q&A using Google NotebookLM as the knowledge source. It includes a Next.js frontend and a FastAPI backend, with direct Python integration to NotebookLM (via patchright). The app supports multiple languages and rich content (tables, charts, markdown).
 
-### Prerequisites
+## Prerequisites
 
 - Python 3.10+
 - Node.js 18+
 - Google account (for NotebookLM authentication)
 
-### Setup
+## Installation
 
-1. Configure backend environment:
-```bash
-cp backend/.env.example backend/.env
-# Edit backend/.env with your NotebookLM URL
-```
+1. Clone the repository.
 
-2. Start services:
+2. Configure the backend environment:
+   ```bash
+   cp backend/.env.example backend/.env
+   ```
+   Edit `backend/.env` and set your NotebookLM notebook URL (`NOTEBOOKLM_URL`).
+
+3. The start script installs dependencies automatically (Python with uv, Node.js, and Chrome for the NotebookLM skill). No manual install step is required if you use `./start.sh`.
+
+## How to Use
+
+### Start the application
+
+Use the provided script (recommended):
+
 ```bash
-# Development
+# Production: real NotebookLM + production frontend
+./start.sh
+
+# Development: real NotebookLM + dev server (hot reload)
 ./start.sh dev
 
-# Production
-./start.sh
+# Mock: mock responses + dev frontend (no Chrome/NotebookLM needed)
+./start.sh mock
 ```
 
-3. Access at: http://localhost:3086
+| Mode   | Command       | Use case                          |
+|--------|---------------|-----------------------------------|
+| prod   | `./start.sh`  | Normal use and deployment         |
+| dev    | `./start.sh dev` | Frontend/backend development   |
+| mock   | `./start.sh mock` | Testing without NotebookLM     |
 
-### Stop Services
+Open the app at **http://localhost:3086**.
+
+### Stop the application
 
 ```bash
 ./stop.sh
 ```
 
-### View Logs
+### View logs
 
 ```bash
 tail -f logs/backend.log
 tail -f logs/frontend.log
 ```
 
-## Project Structure
+### Run backend or frontend alone (optional)
 
-```
-nblm-agent/
-├── frontend/       # Next.js frontend
-├── backend/        # FastAPI backend
-├── logs/           # Application logs
-├── start.sh        # Start script
-└── stop.sh         # Stop script
-```
-
-## Development
-
-### Backend
-
+**Backend only:**
 ```bash
 cd backend
 uv sync
-uv run uvicorn main:app --host 127.0.0.1 --port 8086 --reload
+uv run uvicorn backend.main:app --host 127.0.0.1 --port 8086 --reload
 ```
 
-### Frontend
-
+**Frontend only:**
 ```bash
 cd frontend
 npm install
 npm run dev
+```
+
+## Project structure
+
+```
+stl-chatbot-nblm/
+├── frontend/    # Next.js frontend
+├── backend/     # FastAPI backend + NotebookLM integration
+├── logs/        # Application logs
+├── start.sh     # Start script
+└── stop.sh      # Stop script
 ```
 
 ## License

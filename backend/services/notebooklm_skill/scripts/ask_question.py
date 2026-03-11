@@ -121,29 +121,73 @@ def ask_notebooklm(question: str, notebook_url: str, headless: bool = True) -> s
             except:
                 pass
 
-            # Try to find response with MCP selectors
+            # Get the current response text
+            current_text = None
             for selector in RESPONSE_SELECTORS:
                 try:
                     elements = page.query_selector_all(selector)
                     if elements:
-                        # Get last (newest) response
                         latest = elements[-1]
                         text = latest.inner_text().strip()
-
                         if text:
-                            if text == last_text:
-                                stable_count += 1
-                                if stable_count >= 3:  # Stable for 3 polls
-                                    answer = text
-                                    break
-                            else:
-                                stable_count = 0
-                                last_text = text
+                            current_text = text
+                            break
                 except:
                     continue
 
-            if answer:
-                break
+            # Check if response is stable (not changing)
+            if current_text:
+                if current_text == last_text:
+                    stable_count += 1
+                    if stable_count >= 3:  # Response is stable for 3 consecutive polls
+                        print(f"  ✓ Response stable (length: {len(current_text)} chars)")
+
+                        # NOW try the copy button method
+                        try:
+                            copy_button_found = page.evaluate("""() => {
+                                const copyButtons = Array.from(document.querySelectorAll('button[aria-label="Copy model response to clipboard"]'));
+                                if (copyButtons.length > 0) {
+                                    const lastButton = copyButtons[copyButtons.length - 1];
+                                    lastButton.click();
+                                    return true;
+                                }
+                                return false;
+                            }""")
+
+                            if copy_button_found:
+                                print("  ✓ Clicked copy button")
+                                StealthUtils.random_delay(800, 1200)
+
+                                try:
+                                    clipboard_text = page.evaluate("() => navigator.clipboard.readText()")
+                                    if clipboard_text and len(clipboard_text) > 50:
+                                        print(f"  📋 Clipboard length: {len(clipboard_text)} chars")
+                                        ratio = len(clipboard_text) / len(current_text) if len(current_text) > 0 else 0
+                                        print(f"  📊 Clipboard/Original ratio: {ratio:.2f}")
+                                        if ratio >= 0.7:  # Accept if clipboard has at least 70% of original
+                                            answer = clipboard_text
+                                            print("  ✓ Got clean markdown from clipboard")
+                                            break
+                                        else:
+                                            print(f"  ! Clipboard content too short, using original")
+                                    else:
+                                        print(f"  ! Clipboard empty, using original")
+                                except Exception as e:
+                                    print(f"  ! Clipboard read failed: {e}")
+                            else:
+                                print("  ! No copy button found, using original")
+                        except Exception as e:
+                            print(f"  ! Copy button failed: {e}")
+
+                        # Fall back to original text if clipboard failed
+                        if not answer:
+                            answer = current_text
+                            print("  ✓ Using original text")
+                        break
+                else:
+                    stable_count = 0
+                    last_text = current_text
+                    print(f"  ⏳ Response changing... (length: {len(current_text)} chars)")
 
             time.sleep(1)
 
@@ -152,7 +196,58 @@ def ask_notebooklm(question: str, notebook_url: str, headless: bool = True) -> s
             return None
 
         print("  ✅ Got answer!")
-        # Add follow-up reminder to encourage Claude to ask more questions
+
+        # DEBUG: Save HTML for copy button analysis (only in development mode)
+        # Enable by setting DEBUG=1 environment variable
+        import os
+        if os.environ.get('DEBUG', '0') == '1':
+            try:
+                from pathlib import Path
+                from config import DATA_DIR
+                html_debug_dir = DATA_DIR / "html_debug"
+                html_debug_dir.mkdir(parents=True, exist_ok=True)
+
+                # Save full page HTML
+                timestamp = time.strftime("%Y%m%d_%H%M%S")
+                html_file = html_debug_dir / f"response_{timestamp}.html"
+                html_file.write_text(page.content(), encoding='utf-8')
+                print(f"  💾 Saved HTML to: {html_file}")
+
+                # Try to get copy button HTML specifically
+                try:
+                    copy_btn_html = page.evaluate("""() => {
+                        const btn = document.querySelector('button[class*="copy"]');
+                        return btn ? btn.outerHTML : null;
+                    }""")
+                    if copy_btn_html:
+                        copy_btn_file = html_debug_dir / f"copy_button_{timestamp}.html"
+                        copy_btn_file.write_text(copy_btn_html, encoding='utf-8')
+                        print(f"  💾 Saved copy button HTML to: {copy_btn_file}")
+                except Exception as e:
+                    print(f"  ! Could not save copy button HTML: {e}")
+
+                    # Get all buttons with aria-label containing "copy"
+                    try:
+                        all_copy_buttons = page.evaluate("""() => {
+                            const buttons = document.querySelectorAll('button[aria-label*="copy" i], button[class*="copy" i]');
+                        return Array.from(buttons).map(b => ({
+                            outerHTML: b.outerHTML,
+                            ariaLabel: b.getAttribute('aria-label'),
+                            className: b.className,
+                            textContent: b.textContent?.trim()
+                        }));
+                    }""")
+                        if all_copy_buttons:
+                            import json
+                            buttons_file = html_debug_dir / f"copy_buttons_{timestamp}.json"
+                            buttons_file.write_text(json.dumps(all_copy_buttons, indent=2), encoding='utf-8')
+                            print(f"  💾 Found {len(all_copy_buttons)} copy-related buttons, saved to: {buttons_file}")
+                    except Exception as e:
+                        print(f"  ! Could not enumerate copy buttons: {e}")
+
+            except Exception as e:
+                print(f"  ! HTML debug save failed: {e}")
+
         return answer
 
     except Exception as e:
