@@ -89,18 +89,42 @@ def ask_notebooklm(question: str, notebook_url: str, headless: bool = True) -> s
             print("  ❌ Could not find query input")
             return None
 
+        # Clear the input field first to ensure fresh start
+        print("  🧹 Clearing input field...")
+        input_selector = QUERY_INPUT_SELECTORS[0]
+        try:
+            page.click(input_selector)
+            page.keyboard.press("Control+A")  # Select all
+            page.keyboard.press("Backspace")  # Clear
+            StealthUtils.random_delay(100, 300)
+        except Exception as e:
+            print(f"  ! Could not clear input: {e}")
+
         # Type question (human-like, fast)
         print("  ⏳ Typing question...")
-        
-        # Use primary selector for typing
-        input_selector = QUERY_INPUT_SELECTORS[0]
         StealthUtils.human_type(page, input_selector, question)
 
         # Submit
         print("  📤 Submitting...")
         page.keyboard.press("Enter")
 
-        # Small pause
+        # Wait for "thinking" indicator to appear (confirms new query was submitted)
+        print("  ⏳ Waiting for thinking indicator...")
+        thinking_appeared = False
+        think_deadline = time.time() + 15  # 15 seconds to see thinking
+
+        while time.time() < think_deadline:
+            try:
+                thinking_element = page.query_selector('div.thinking-message')
+                if thinking_element and thinking_element.is_visible():
+                    thinking_appeared = True
+                    print("  ✓ Thinking started")
+                    break
+            except:
+                pass
+            time.sleep(0.2)
+
+        # Small pause after submission
         StealthUtils.random_delay(500, 1500)
 
         # Wait for response (MCP approach: poll for stable text)
@@ -109,6 +133,7 @@ def ask_notebooklm(question: str, notebook_url: str, headless: bool = True) -> s
         answer = None
         stable_count = 0
         last_text = None
+        response_changed = False  # Track if we've seen a NEW response
         deadline = time.time() + 120  # 2 minutes timeout
 
         while time.time() < deadline:
@@ -116,7 +141,8 @@ def ask_notebooklm(question: str, notebook_url: str, headless: bool = True) -> s
             try:
                 thinking_element = page.query_selector('div.thinking-message')
                 if thinking_element and thinking_element.is_visible():
-                    time.sleep(1)
+                    # Still thinking, skip response check
+                    time.sleep(0.5)
                     continue
             except:
                 pass
@@ -139,7 +165,8 @@ def ask_notebooklm(question: str, notebook_url: str, headless: bool = True) -> s
             if current_text:
                 if current_text == last_text:
                     stable_count += 1
-                    if stable_count >= 3:  # Response is stable for 3 consecutive polls
+                    # Only accept as stable if we've seen a change (new response generated)
+                    if stable_count >= 3 and response_changed:  # Response is stable for 3 consecutive polls AND we saw a new response
                         print(f"  ✓ Response stable (length: {len(current_text)} chars)")
 
                         # NOW try the copy button method
@@ -187,6 +214,7 @@ def ask_notebooklm(question: str, notebook_url: str, headless: bool = True) -> s
                 else:
                     stable_count = 0
                     last_text = current_text
+                    response_changed = True  # Mark that we've seen a response change
                     print(f"  ⏳ Response changing... (length: {len(current_text)} chars)")
 
             time.sleep(1)
