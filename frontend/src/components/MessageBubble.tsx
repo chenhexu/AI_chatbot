@@ -2,6 +2,7 @@
 
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkBreaks from "remark-breaks";
 import { ReactNode } from "react";
 
 interface MessageBubbleProps {
@@ -53,7 +54,7 @@ export default function MessageBubble({ role, content, timestamp }: MessageBubbl
         {/* Render content as markdown to support tables, code, lists, etc. */}
         <div className={`prose prose-sm max-w-none ${isUser ? "prose-invert" : "prose-gray"}`}>
           <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
+            remarkPlugins={[remarkGfm, remarkBreaks]}
             components={{
               a: (props: any) => {
                 const { node, ...rest } = props;

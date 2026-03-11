@@ -23,6 +23,7 @@ class NotebookLMStatus:
 class SourceLabels:
     """Source labels for responses."""
     MOCK_SERVICE = "Mock Service"
+    NOTEBOOKLM = "NotebookLM"
 
 
 class HealthStatus:

@@ -5,16 +5,16 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from backend.utils.config import config
-from backend.utils.logger import logger
-from backend.utils.constants import (
+from utils.config import config
+from utils.logger import logger
+from utils.constants import (
     ResponseKeys,
     NotebookLMStatus,
     HealthStatus,
 )
-from backend.models.schemas import ChatRequest, ChatResponse, HealthResponse
-from backend.services.auth_service import AuthService
-from backend.services.service_factory import get_notebooklm_service, NotebookLMServiceInterface
+from models.schemas import ChatRequest, ChatResponse, HealthResponse
+from services.auth_service import AuthService
+from services.service_factory import get_notebooklm_service, NotebookLMServiceInterface
 
 # Lazy initialization - services will be created when needed
 _auth_service: Optional[AuthService] = None

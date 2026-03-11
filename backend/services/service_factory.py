@@ -7,8 +7,8 @@ for service instantiation.
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
 
-from backend.utils.config import config
-from backend.utils.constants import ResponseKeys
+from utils.config import config
+from utils.constants import ResponseKeys
 
 
 class NotebookLMServiceInterface(ABC):
@@ -52,11 +52,12 @@ class NotebookLMServiceFactory:
             use_mock = config.MOCK_NOTEBOOKLM
 
         if use_mock:
-            from backend.services.mock_notebooklm_service import MockNotebookLMService
+            from services.mock_notebooklm_service import MockNotebookLMService
             return MockNotebookLMService()
         else:
-            from backend.services.notebooklm_service import NotebookLMService
-            return NotebookLMService()
+            # Use the ORIGINAL skill code (copied from skills/notebooklm/)
+            from services.notebooklm_skill_service import NotebookLMOriginalSkillService
+            return NotebookLMOriginalSkillService()
 
 
 # Convenience function for quick access

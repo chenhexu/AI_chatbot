@@ -14,12 +14,11 @@ def test_query_notebook():
 
 
 def test_notebooklm_service_initialization():
-    """Test that NotebookLMService can be initialized with correct paths"""
+    """Test that NotebookLMService can be initialized with correct configuration"""
     service = NotebookLMService()
-    assert service.skill_path is not None
     assert service.notebook_url is not None
-    # Verify paths use the local skills directory
-    assert "skills/notebooklm" in str(service.skill_path)
+    # Service now uses direct Python integration, no skill_path
+    assert hasattr(service, '_client') or service._client is None
 
 
 def test_query_with_mocked_subprocess():

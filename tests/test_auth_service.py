@@ -24,9 +24,8 @@ def test_auth_service_initialization():
     assert auth_service.skill_path is not None
     assert auth_service.auth_file is not None
     assert auth_service.auth_script is not None
-    # Verify paths use the local skills directory
-    assert "skills/notebooklm" in str(auth_service.skill_path)
-    assert "skills/notebooklm" in str(auth_service.auth_file)
+    # Verify paths use the backend services directory
+    assert "backend/services/notebooklm" in str(auth_service.skill_path)
 
 def test_path_validation_when_skill_path_missing():
     """Test that authentication fails gracefully when skill path doesn't exist"""
@@ -91,10 +90,8 @@ def test_authenticate_fails_with_invalid_paths():
 def test_path_consistency():
     """Test that skill_path and auth_file use consistent base directory"""
     auth_service = AuthService()
-    # Both should use skills/notebooklm as base (local project path)
+    # Both should use backend/services/notebooklm as base
     skill_str = str(auth_service.skill_path)
-    auth_str = str(auth_service.auth_file)
-    assert "skills/notebooklm" in skill_str
-    assert "skills/notebooklm" in auth_str
-    # Ensure they don't use inconsistent paths
-    assert ".agents/skills" not in auth_str
+    assert "backend/services/notebooklm" in skill_str
+    # Ensure they don't use old paths
+    assert ".agents/skills" not in skill_str

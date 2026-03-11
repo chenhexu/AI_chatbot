@@ -33,3 +33,7 @@ frontend/out/
 test-reports/
 ui-test-screenshots/
 .playwright-mcp/
+
+# NotebookLM Browser State
+backend/data/
+skills/

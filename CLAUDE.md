@@ -68,11 +68,6 @@ stl-chatbot-nblm/
 │   └── UI_TEST_SUITE_SUMMARY.md  # Test suite implementation summary
 ├── scripts/              # Utility scripts
 │   └── test-runner.sh    # Test runner script
-├── skills/               # Bundled NotebookLM skill (no Claude Code required)
-│   └── notebooklm/       # NotebookLM CLI skill scripts
-│       ├── scripts/      # Python scripts for NotebookLM interaction
-│       ├── data/         # Browser state and authentication (auto-generated)
-│       └── requirements.txt
 ├── logs/                 # Application logs
 ├── start.sh              # Start script
 └── stop.sh               # Stop script
@@ -86,7 +81,7 @@ stl-chatbot-nblm/
 - Node.js 18+
 - Google account (for NotebookLM authentication)
 
-**Note**: The NotebookLM skill is bundled with this project. No separate installation or Claude Code required.
+**Note**: This project uses direct Python integration with Google NotebookLM via patchright.
 
 ### Installation
 
@@ -174,8 +169,9 @@ npm run dev
                                                      │
                                                      ▼
                                           ┌─────────────────────┐
-                                          │   NotebookLM CLI    │
-                                          │  (skills/notebooklm/)│
+                                          │  NotebookLM Client  │
+                                          │ (Direct Python +    │
+                                          │   Patchright)       │
                                           └─────────────────────┘
                                                      │
                                                      ▼
@@ -195,8 +191,8 @@ npm run dev
 
 ### Backend Services
 
-- **AuthService**: Manages NotebookLM authentication via CLI skill
-- **NotebookLMService**: Handles queries to NotebookLM via subprocess calls
+- **AuthService**: Manages NotebookLM authentication
+- **NotebookLMService**: Handles queries to NotebookLM via direct Python integration using patchright
 
 ## Testing
 
@@ -270,23 +266,16 @@ Located in `backend/.env`:
 
 - The frontend runs on port 3086 (development) or serves static files (production)
 - The backend runs on port 8086
-- The NotebookLM skill is **bundled** with the project at `skills/notebooklm/`
-- No Claude Code installation required - the skill is self-contained
-- NotebookLM authentication state is stored in `skills/notebooklm/data/` (auto-generated on first run)
-- All NotebookLM queries go through the bundled `scripts/run.py`
+- NotebookLM integration uses direct Python calls via patchright (no subprocess)
+- NotebookLM authentication state is stored in `backend/data/notebooklm/` (auto-generated, excluded from git)
 - Chrome browser is installed automatically by patchright on first run
 - User messages display with white text on blue background
 - Assistant messages display with dark text on white background
 
 ## Deployment Notes
 
-The project is designed to work without Claude Code. The bundled NotebookLM skill includes:
-
-- `skills/notebooklm/scripts/` - Python scripts for NotebookLM interaction
-- `skills/notebooklm/requirements.txt` - Skill dependencies (patchright, python-dotenv)
-- `skills/notebooklm/data/` - Browser state (auto-generated, excluded from git)
-
 For deployment, ensure:
 1. Python 3.10+ and Node.js 18+ are installed
 2. Chrome browser can be installed (required by patchright)
 3. The `backend/.env` file is configured with the NotebookLM URL
+4. Patchright dependency is available (specified in backend/pyproject.toml)

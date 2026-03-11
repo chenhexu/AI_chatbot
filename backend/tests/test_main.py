@@ -36,7 +36,7 @@ def mock_services():
 def client(mock_services):
     """Create test client with mocked services"""
     # Import after patching to ensure mocks are applied
-    from backend.main import app
+    from main import app
     return TestClient(app)
 
 
@@ -104,7 +104,7 @@ def test_cors_middleware(client):
     assert response.status_code == 200
 
     # Verify CORS middleware is present by checking the app configuration
-    from backend.main import app
+    from main import app
     from starlette.middleware.cors import CORSMiddleware
 
     # Check that CORS middleware is in the middleware stack

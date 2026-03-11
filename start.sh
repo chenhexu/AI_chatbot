@@ -89,9 +89,9 @@ echo -e "${GREEN}[6/6] Starting services...${NC}"
 # Start backend with appropriate mode
 cd "$PROJECT_ROOT/backend"
 if [ "$IS_DEV_MODE" = true ]; then
-    nohup uv run python -m uvicorn backend.main:app --host 127.0.0.1 --port 8086 --reload > "$LOG_DIR/backend.log" 2>&1 &
+    nohup uv run python -m uvicorn main:app --host 127.0.0.1 --port 8086 --reload > "$LOG_DIR/backend.log" 2>&1 &
 else
-    nohup uv run python -m uvicorn backend.main:app --host 127.0.0.1 --port 8086 > "$LOG_DIR/backend.log" 2>&1 &
+    nohup uv run python -m uvicorn main:app --host 127.0.0.1 --port 8086 > "$LOG_DIR/backend.log" 2>&1 &
 fi
 BACKEND_PID=$!
 echo $BACKEND_PID > "$LOG_DIR/backend.pid"
