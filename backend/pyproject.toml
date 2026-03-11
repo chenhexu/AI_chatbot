@@ -12,7 +12,10 @@ dependencies = [
 ]
 
 [tool.setuptools]
-packages = ["backend"]
+py-modules = ["main"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["models*", "services*", "utils*"]
 
 [dependency-groups]
 dev = [
