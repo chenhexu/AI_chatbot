@@ -12,7 +12,16 @@ This is a full-stack chatbot that provides AI-powered Q&A using Google NotebookL
 
 - Python 3.10+
 - Node.js 18+
+- [uv](https://docs.astral.sh/uv/) (Python package manager). Install: `brew install uv` or `curl -LsSf https://astral.sh/uv/install.sh | sh`
 - Google account (for NotebookLM authentication)
+
+For **real NotebookLM** (prod or dev mode), run the one-time auth setup from the project root:
+
+```bash
+cd backend && uv run python -m services.notebooklm_skill.scripts.auth_manager setup
+```
+
+This opens a browser for Google sign-in and saves the session. Optional: `status`, `validate`, `clear`, or `reauth` for other auth commands.
 
 ## Installation
 
