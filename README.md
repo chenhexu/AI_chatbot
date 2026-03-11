@@ -2,7 +2,7 @@
 
 A web chatbot for answering questions about Collège Saint-Louis using Google NotebookLM.
 
-**Author:** Tony Xu
+**Author:** Chenhe Xu
 
 ## Introduction
 
