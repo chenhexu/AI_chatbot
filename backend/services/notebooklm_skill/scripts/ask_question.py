@@ -26,6 +26,110 @@ from config import QUERY_INPUT_SELECTORS, RESPONSE_SELECTORS
 from browser_utils import BrowserFactory, StealthUtils
 
 
+def _try_copy_button(response_element, page) -> str:
+    """
+    Try to click the copy button associated with a specific response element.
+
+    Args:
+        response_element: The Playwright element handle for the response
+        page: The Playwright page object
+
+    Returns:
+        Clipboard text if successful, None otherwise
+    """
+    try:
+        # Search for the copy button within the same container as the response
+        # This ensures we get the copy button for THIS response, not an old one
+        result = page.evaluate("""(element) => {
+            // Find the container of this response
+            let container = element;
+
+            // Try different container levels
+            const possibleContainers = [
+                element,
+                element.parentElement,  // Parent
+                element.parentElement?.parentElement,  // Grandparent
+                element.closest('.to-user-container'),  // Closest message container
+                element.closest('[data-message-author="bot"]'),  // Bot message container
+                element.closest('[data-message-author="assistant"]'),  // Assistant container
+            ];
+
+            let copyButton = null;
+
+            // Search for copy button in each container level
+            for (const cont of possibleContainers) {
+                if (!cont) continue;
+
+                // Try multiple selectors for copy button
+                const selectors = [
+                    'button[aria-label="Copy model response to clipboard"]',
+                    'button[aria-label*="copy" i]',
+                    'button[class*="copy" i]',
+                    'button[title*="copy" i]',
+                    '.copy-button',
+                    'button[aria-label*="Copy"]',
+                ];
+
+                for (const selector of selectors) {
+                    const buttons = cont.querySelectorAll(selector);
+                    if (buttons.length > 0) {
+                        // Get the first copy button in this container
+                        copyButton = buttons[0];
+                        break;
+                    }
+                }
+
+                if (copyButton) break;
+            }
+
+            if (!copyButton) {
+                return { found: false, error: 'No copy button found in response container' };
+            }
+
+            // Click the button
+            copyButton.click();
+
+            return { found: true, buttonHTML: copyButton.outerHTML };
+        }""", response_element)
+
+        if not result or not result.get('found'):
+            print(f"  ! Copy button not found: {result.get('error', 'Unknown error')}")
+            return None
+
+        print("  ✓ Clicked copy button")
+
+        # Wait for clipboard to be populated
+        StealthUtils.random_delay(500, 1000)
+
+        # Read clipboard
+        clipboard_text = page.evaluate("() => navigator.clipboard.readText()")
+
+        if not clipboard_text:
+            print("  ! Clipboard is empty")
+            return None
+
+        print(f"  📋 Got clipboard content ({len(clipboard_text)} chars)")
+
+        # Validate clipboard content matches response roughly
+        # The clipboard might have markdown formatting, so it could be longer
+        # But it shouldn't be drastically different
+        response_text = response_element.inner_text().strip()
+        clipboard_ratio = len(clipboard_text) / len(response_text) if len(response_text) > 0 else 0
+
+        # Accept clipboard if ratio is reasonable (0.3 to 5.0)
+        # Markdown formatting can make it significantly longer or shorter
+        if 0.3 <= clipboard_ratio <= 5.0:
+            print(f"  ✓ Clipboard content validated (ratio: {clipboard_ratio:.2f})")
+            return clipboard_text
+        else:
+            print(f"  ! Clipboard content seems off (ratio: {clipboard_ratio:.2f}), ignoring")
+            return None
+
+    except Exception as e:
+        print(f"  ! Copy button error: {e}")
+        return None
+
+
 def ask_notebooklm(question: str, notebook_url: str, headless: bool = True) -> str:
     """
     Ask a question to NotebookLM
@@ -89,42 +193,16 @@ def ask_notebooklm(question: str, notebook_url: str, headless: bool = True) -> s
             print("  ❌ Could not find query input")
             return None
 
-        # Clear the input field first to ensure fresh start
-        print("  🧹 Clearing input field...")
-        input_selector = QUERY_INPUT_SELECTORS[0]
-        try:
-            page.click(input_selector)
-            page.keyboard.press("Control+A")  # Select all
-            page.keyboard.press("Backspace")  # Clear
-            StealthUtils.random_delay(100, 300)
-        except Exception as e:
-            print(f"  ! Could not clear input: {e}")
-
-        # Type question (human-like, fast)
+        # Type question (human-like, fast) - ORIGINAL SKILL APPROACH: No clearing
         print("  ⏳ Typing question...")
+        input_selector = QUERY_INPUT_SELECTORS[0]
         StealthUtils.human_type(page, input_selector, question)
 
         # Submit
         print("  📤 Submitting...")
         page.keyboard.press("Enter")
 
-        # Wait for "thinking" indicator to appear (confirms new query was submitted)
-        print("  ⏳ Waiting for thinking indicator...")
-        thinking_appeared = False
-        think_deadline = time.time() + 15  # 15 seconds to see thinking
-
-        while time.time() < think_deadline:
-            try:
-                thinking_element = page.query_selector('div.thinking-message')
-                if thinking_element and thinking_element.is_visible():
-                    thinking_appeared = True
-                    print("  ✓ Thinking started")
-                    break
-            except:
-                pass
-            time.sleep(0.2)
-
-        # Small pause after submission
+        # Small pause
         StealthUtils.random_delay(500, 1500)
 
         # Wait for response (MCP approach: poll for stable text)
@@ -133,88 +211,82 @@ def ask_notebooklm(question: str, notebook_url: str, headless: bool = True) -> s
         answer = None
         stable_count = 0
         last_text = None
-        response_changed = False  # Track if we've seen a NEW response
         deadline = time.time() + 120  # 2 minutes timeout
+
+        # Rate limit detection patterns
+        RATE_LIMIT_PATTERNS = [
+            "The system was unable to answer",
+            "Unable to answer",
+            "Daily limit reached",
+            "Rate limit exceeded",
+        ]
 
         while time.time() < deadline:
             # Check if NotebookLM is still thinking (most reliable indicator)
             try:
                 thinking_element = page.query_selector('div.thinking-message')
                 if thinking_element and thinking_element.is_visible():
-                    # Still thinking, skip response check
-                    time.sleep(0.5)
-                    continue
+                    time.sleep(1)
+                    continue  # Still thinking, wait
             except:
                 pass
 
             # Get the current response text
             current_text = None
+            current_element = None  # Store the element for copy button search
+
             for selector in RESPONSE_SELECTORS:
                 try:
                     elements = page.query_selector_all(selector)
                     if elements:
-                        latest = elements[-1]
-                        text = latest.inner_text().strip()
+                        # Get last (newest) response
+                        current_element = elements[-1]
+                        text = current_element.inner_text().strip()
+
                         if text:
                             current_text = text
                             break
                 except:
                     continue
 
-            # Check if response is stable (not changing)
+            # Check if we have a response
             if current_text:
+                # Check for rate limit messages
+                is_rate_limit = any(pattern.lower() in current_text.lower() for pattern in RATE_LIMIT_PATTERNS)
+                if is_rate_limit:
+                    print(f"  ⚠️ Rate limit detected: {current_text}")
+                    answer = current_text
+                    break
+
+                # Check stability
                 if current_text == last_text:
                     stable_count += 1
-                    # Only accept as stable if we've seen a change (new response generated)
-                    if stable_count >= 3 and response_changed:  # Response is stable for 3 consecutive polls AND we saw a new response
+                    if stable_count >= 3:  # Stable for 3 consecutive polls
                         print(f"  ✓ Response stable (length: {len(current_text)} chars)")
 
-                        # NOW try the copy button method
-                        try:
-                            copy_button_found = page.evaluate("""() => {
-                                const copyButtons = Array.from(document.querySelectorAll('button[aria-label="Copy model response to clipboard"]'));
-                                if (copyButtons.length > 0) {
-                                    const lastButton = copyButtons[copyButtons.length - 1];
-                                    lastButton.click();
-                                    return true;
-                                }
-                                return false;
-                            }""")
-
-                            if copy_button_found:
-                                print("  ✓ Clicked copy button")
-                                StealthUtils.random_delay(800, 1200)
-
-                                try:
-                                    clipboard_text = page.evaluate("() => navigator.clipboard.readText()")
-                                    if clipboard_text and len(clipboard_text) > 50:
-                                        print(f"  📋 Clipboard length: {len(clipboard_text)} chars")
-                                        ratio = len(clipboard_text) / len(current_text) if len(current_text) > 0 else 0
-                                        print(f"  📊 Clipboard/Original ratio: {ratio:.2f}")
-                                        if ratio >= 0.7:  # Accept if clipboard has at least 70% of original
-                                            answer = clipboard_text
-                                            print("  ✓ Got clean markdown from clipboard")
-                                            break
-                                        else:
-                                            print(f"  ! Clipboard content too short, using original")
-                                    else:
-                                        print(f"  ! Clipboard empty, using original")
-                                except Exception as e:
-                                    print(f"  ! Clipboard read failed: {e}")
-                            else:
-                                print("  ! No copy button found, using original")
-                        except Exception as e:
-                            print(f"  ! Copy button failed: {e}")
-
-                        # Fall back to original text if clipboard failed
-                        if not answer:
+                        # Determine if we should try copy button or use direct text
+                        # For short responses (single line), use direct text
+                        # For longer responses, try copy button for clean markdown
+                        if len(current_text) < 100 or '\n' not in current_text:
+                            # Short response - use direct text
+                            print("  ✓ Using direct text (short response)")
                             answer = current_text
-                            print("  ✓ Using original text")
-                        break
+                            break
+                        else:
+                            # Longer response - try copy button first
+                            print("  📋 Trying copy button for clean markdown...")
+                            markdown = _try_copy_button(current_element, page)
+                            if markdown:
+                                answer = markdown
+                                break
+                            else:
+                                # Fallback to direct text
+                                print("  ! Copy button failed, using direct text")
+                                answer = current_text
+                                break
                 else:
                     stable_count = 0
                     last_text = current_text
-                    response_changed = True  # Mark that we've seen a response change
                     print(f"  ⏳ Response changing... (length: {len(current_text)} chars)")
 
             time.sleep(1)
