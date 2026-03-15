@@ -4,6 +4,14 @@ A web chatbot for answering questions about Collège Saint-Louis using Google No
 
 **Author:** Chenhe Xu
 
+## Screenshots
+
+![Chatbot — Collège Saint-Louis](exemple1.png)
+
+![Chatbot — Q&A example](exemple2.png)
+
+---
+
 ## Introduction
 
 This is a full-stack chatbot that provides AI-powered Q&A using Google NotebookLM as the knowledge source. It includes a Next.js frontend and a FastAPI backend, with direct Python integration to NotebookLM (via patchright). The app supports multiple languages and rich content (tables, charts, markdown).
