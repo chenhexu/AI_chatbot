@@ -170,6 +170,11 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { message, provider = 'openai', backgroundAI = 'gemini' } = body;
+    
+    // Validate provider
+    if (provider !== 'openai' && provider !== 'gemini' && provider !== 'glm' && provider !== 'ollama') {
+      return NextResponse.json({ error: 'Invalid provider. Must be openai, gemini, glm, or ollama' }, { status: 400 });
+    }
 
     if (!message || typeof message !== 'string') {
       return NextResponse.json(
@@ -190,10 +195,12 @@ export async function POST(request: NextRequest) {
     if (enableSubjectFilter) {
       const subjectStartCpu = process.cpuUsage();
       console.log(`[${requestId}] 🧠 Classifying query subject...`);
+      console.log(`[${requestId}] 📝 Original query: "${message}"`);
       try {
         querySubjects = await classifyQuerySubject(message, backgroundAI);
         logCpuUsage(requestId, 'Subject Classification', subjectStartCpu);
-        console.log(`[${requestId}] ✅ Query subjects: ${querySubjects.join(', ')}`);
+        console.log(`[${requestId}] ✅ Query subjects classified: [${querySubjects.join(', ')}]`);
+        console.log(`[${requestId}] 📊 Classification details: ${querySubjects.length} subject(s) identified`);
       } catch (error) {
         logCpuUsage(requestId, 'Subject Classification (failed)', subjectStartCpu);
         console.error(`[${requestId}] ⚠️ Subject classification failed, using all chunks:`, error);
@@ -222,24 +229,30 @@ export async function POST(request: NextRequest) {
     let chunks: TextChunk[];
     if (process.env.DATABASE_URL && querySubjects.length > 0 && enableSubjectFilter) {
       // Try to load from database with subject filter
+      console.log(`[${requestId}] 🔍 Attempting to load chunks with subject filter: [${querySubjects.join(', ')}]`);
       try {
-        chunks = await loadAllChunks(querySubjects);
+        const filteredChunks = await loadAllChunks(querySubjects);
+        console.log(`[${requestId}] 📊 Subject filter result: ${filteredChunks.length} chunks found`);
         // Classification is complete - use filtered chunks (subject filtering is working)
-        if (chunks.length === 0) {
+        if (filteredChunks.length === 0) {
           // Only fallback if we got zero chunks (likely a classification issue)
-          console.log(`[${requestId}] ⚠️ No chunks found with subject filter, loading all chunks as fallback...`);
+          console.log(`[${requestId}] ⚠️ No chunks found with subject filter [${querySubjects.join(', ')}], loading all chunks as fallback...`);
           chunks = await loadAllChunks(); // Load all chunks
+          console.log(`[${requestId}] 📊 Fallback result: ${chunks.length} total chunks loaded (no subject filter)`);
         } else {
-          console.log(`[${requestId}] 🔍 Loaded ${chunks.length} chunks from subjects: ${querySubjects.join(', ')}`);
+          chunks = filteredChunks;
+          console.log(`[${requestId}] ✅ Loaded ${chunks.length} chunks from subjects: [${querySubjects.join(', ')}]`);
         }
       } catch (error) {
         console.error(`[${requestId}] ⚠️ Subject filter failed, loading all chunks:`, error);
         chunks = await loadAllChunks(); // Fallback to all chunks
+        console.log(`[${requestId}] 📊 Error fallback result: ${chunks.length} total chunks loaded`);
       }
     } else {
       // Load all chunks (filesystem or no subject filter)
+      console.log(`[${requestId}] 🔍 Loading all chunks (no subject filter or no DATABASE_URL)`);
       chunks = await getDocumentChunks();
-      console.log(`[${requestId}] 🔍 Loaded ${chunks.length} chunks (no subject filter)`);
+      console.log(`[${requestId}] 📊 Loaded ${chunks.length} chunks (no subject filter)`);
     }
     const chunkLoadTime = Date.now() - chunkLoadStartTime;
     logCpuUsage(requestId, `Chunk Loading (${chunks.length} chunks, ${chunkLoadTime}ms)`, chunkLoadStartCpu);
@@ -259,7 +272,7 @@ export async function POST(request: NextRequest) {
     // Step 4: Generate response using selected AI provider with RAG (using expanded query)
     const ragStartCpu = process.cpuUsage();
     const ragStartTime = Date.now();
-    const response = await generateChatResponse(message, chunks, requestId, provider, expandedQuery);
+    const response = await generateChatResponse(message, chunks, requestId, provider, expandedQuery, querySubjects);
     const ragTime = Date.now() - ragStartTime;
     logCpuUsage(requestId, `RAG + AI Response (${ragTime}ms)`, ragStartCpu);
     

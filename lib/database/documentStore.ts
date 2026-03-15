@@ -87,7 +87,7 @@ export async function loadAllChunks(subjects?: string[]): Promise<TextChunk[]> {
   try {
     console.log('📡 Executing database query to load chunks...');
     
-    let sql = `SELECT text, source, chunk_index, pdf_url
+    let sql = `SELECT text, source, chunk_index, pdf_url, subject
        FROM chunks`;
     
     const params: any[] = [];
@@ -110,7 +110,7 @@ export async function loadAllChunks(subjects?: string[]): Promise<TextChunk[]> {
     
     sql += ` ORDER BY document_id, chunk_index`;
     
-    const result = await query<{ text: string; source: string; chunk_index: number; pdf_url: string | null }>(
+    const result = await query<{ text: string; source: string; chunk_index: number; pdf_url: string | null; subject: string | null }>(
       sql,
       params
     );
@@ -122,6 +122,7 @@ export async function loadAllChunks(subjects?: string[]): Promise<TextChunk[]> {
         source: row.source,
         index: row.chunk_index,
         pdfUrl: row.pdf_url || undefined,
+        subject: row.subject || undefined,
       }))
     );
     

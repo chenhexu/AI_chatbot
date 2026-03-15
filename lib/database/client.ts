@@ -33,9 +33,18 @@ export function getDatabasePool(): Pool {
       console.error('❌ Failed to parse DATABASE_URL:', e);
     }
 
+    // Determine if SSL is required
+    // Render PostgreSQL requires SSL for external connections
+    // Azure PostgreSQL also requires SSL
+    const requiresSSL = 
+      process.env.NODE_ENV === 'production' ||
+      connectionString.includes('render.com') ||
+      connectionString.includes('postgres.database.azure.com') ||
+      connectionString.includes('sslmode=require');
+
     pool = new Pool({
       connectionString,
-      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+      ssl: requiresSSL ? { rejectUnauthorized: false } : false,
       max: 20, // Maximum number of clients in the pool
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000, // Increased to 10 seconds for external connections
