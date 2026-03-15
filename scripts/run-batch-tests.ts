@@ -4,9 +4,9 @@
  * 
  * Usage:
  *   npm run batch-test
- *   npm run batch-test -- --provider gemini --gemini-model gemma-3-12b
+ *   npm run batch-test -- --provider gemini --gemini-model gemini-2.5-flash
  *   npm run batch-test -- --provider openai --background-ai gemini
- *   npm run batch-test -- --background-ai gemini --gemini-model gemma-3-12b
+ *   npm run batch-test -- --background-ai gemini --gemini-model gemini-2.5-flash
  *   npm run batch-test -- --questions scripts/test-questions.json
  * 
  * Gemini Models:
@@ -79,6 +79,9 @@ async function processQuery(
     } else if (provider === 'glm') {
       const { getGLMModel } = await import('../lib/openai');
       providerModel = getGLMModel();
+    } else if (provider === 'ollama') {
+      const { getOllamaModel } = await import('../lib/openai');
+      providerModel = getOllamaModel();
     }
     
     if (backgroundAI === 'gemini') {
@@ -322,9 +325,7 @@ async function main() {
   console.log(`🔍 Parsing arguments: ${JSON.stringify(actualArgs)}`);
   
   // Handle case where npm passes values without flags (PowerShell/npm quirk)
-  // e.g., ["gemini", "gemini", "gemma-3-12b"] instead of ["--provider", "gemini", "--background-ai", "gemini", "--gemini-model", "gemma-3-12b"]
   if (actualArgs.length >= 1 && !actualArgs[0].startsWith('--')) {
-    // Positional arguments: [provider, backgroundAI, geminiModel]
     if (actualArgs[0] && (actualArgs[0] === 'openai' || actualArgs[0] === 'gemini' || actualArgs[0] === 'glm' || actualArgs[0] === 'ollama')) {
       provider = actualArgs[0] as 'openai' | 'gemini' | 'glm' | 'ollama';
       console.log(`✅ Provider set to: ${provider} (positional)`);
@@ -339,15 +340,14 @@ async function main() {
       console.log(`✅ Gemini model set to: ${geminiModel} (positional)`);
     }
   } else {
-    // Normal flag-based parsing
     for (let i = 0; i < actualArgs.length; i++) {
-          if (actualArgs[i] === '--provider' && i + 1 < actualArgs.length) {
-            const p = actualArgs[i + 1].toLowerCase();
-            if (p === 'openai' || p === 'gemini' || p === 'glm' || p === 'ollama') {
-              provider = p as 'openai' | 'gemini' | 'glm' | 'ollama';
-              console.log(`✅ Provider set to: ${provider}`);
-            }
-            i++;
+      if (actualArgs[i] === '--provider' && i + 1 < actualArgs.length) {
+        const p = actualArgs[i + 1].toLowerCase();
+        if (p === 'openai' || p === 'gemini' || p === 'glm' || p === 'ollama') {
+          provider = p as 'openai' | 'gemini' | 'glm' | 'ollama';
+          console.log(`✅ Provider set to: ${provider}`);
+        }
+        i++;
       } else if (actualArgs[i] === '--background-ai' && i + 1 < actualArgs.length) {
         const b = actualArgs[i + 1].toLowerCase();
         if (b === 'gemini' || b === 'glm') {
@@ -471,7 +471,6 @@ async function main() {
     console.log(`=================================================\n`);
   }
   
-  // Generate and save report (if not already saved by interrupt handler)
   if (!interrupted) {
     saveReport(false);
   }

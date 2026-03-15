@@ -65,6 +65,7 @@ service-account*.json
 # Test files and scripts (not needed for production)
 test-*.ts
 scripts/test-*.ts
+scripts/test-report-*.txt
 scripts/test-*.ps1
 debug-files.ts
 start-crawler.sh
